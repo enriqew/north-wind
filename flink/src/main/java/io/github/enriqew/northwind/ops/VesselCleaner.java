@@ -30,6 +30,7 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
     /** How long, in event time, a transmission is remembered for duplicate detection. */
     static final long DEDUP_HORIZON_MS = 10 * 60_000L;
     private static final long MINUTE_MS = 60_000L;
+    static final double UNDERWAY_KNOTS = 1.0;
 
     private final TrackFilter trackFilter = new TrackFilter();
 
@@ -39,6 +40,7 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
     private transient ValueState<Integer> length;
     private transient ValueState<Long> staticTime;
     private transient ValueState<TrackFilter.State> track;
+    private transient ValueState<Long> lastUnderway;
 
     @Override
     public void open(Configuration parameters) {
@@ -50,6 +52,7 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
         staticTime = getRuntimeContext().getState(new ValueStateDescriptor<>("staticTime", Types.LONG));
         track = getRuntimeContext().getState(
                 new ValueStateDescriptor<>("track", Types.POJO(TrackFilter.State.class)));
+        lastUnderway = getRuntimeContext().getState(new ValueStateDescriptor<>("lastUnderway", Types.LONG));
     }
 
     @Override
@@ -101,6 +104,10 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
                     AisRecord enriched = r.copy();
                     enriched.shipType = shipType.value();
                     enriched.length = length.value();
+                    if (r.sog != null && r.sog >= UNDERWAY_KNOTS) {
+                        lastUnderway.update(r.msgtimeMs);
+                    }
+                    enriched.lastUnderwayMs = lastUnderway.value();
                     out.collect(enriched);
                     ctx.output(Tags.AUDIT, Disposition.of(Disposition.POSITION, null, r));
                 } else {
