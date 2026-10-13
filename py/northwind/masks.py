@@ -1,9 +1,9 @@
 """Masks for a window, derived from the window itself.
 
-- ports.csv: fine cells (0.01 x 0.02 degrees) where at least MIN_VESSELS distinct vessels report
-  being moored or at anchor while stopped, grown by one cell, grouped into port areas by
-  8-connectivity. No external port registry is used: a port area here is where ships in this
-  recording actually tie up or anchor.
+- ports.csv: fine cells (0.01 x 0.02 degrees) where at least MIN_VESSELS distinct vessels each sit
+  stopped (under STOP_KNOTS) for MIN_DWELL_MS or more, grown by one cell, grouped into port areas
+  by 8-connectivity. No external port registry is used: a port area here is where ships in this
+  recording actually tie up or anchor, quays and anchorages alike.
 - coverage.csv: coarse cells (0.1 x 0.2 degrees) with a terrestrial or offshore position in at
   least COVERAGE_SHARE of the window's hours. Inside them, reception is continuous, so a silence is
   a fact about the vessel rather than about the receivers.
@@ -29,6 +29,7 @@ log = logging.getLogger("northwind.masks")
 PORT_DLAT, PORT_DLON = 0.01, 0.02
 COVERAGE_DLAT, COVERAGE_DLON = 0.1, 0.2
 MIN_VESSELS = 3
+MIN_DWELL_MS = 20 * 60_000
 STOP_KNOTS = 0.5
 COVERAGE_SHARE = 0.9
 STALL_MS = 60_000
@@ -111,11 +112,18 @@ def main() -> None:
     con = connect()
     con.execute(POSITIONS.format(glob=raw_glob(), start=m.start_ms, end=m.end_ms))
 
+    # Stopped is measured, not declared: many vessels keep reporting "under way using engine"
+    # while tied up, so the navigational status alone missed whole fishing harbours.
     stopped = con.execute(
         f"""
-        SELECT floor(lat / {PORT_DLAT})::BIGINT AS r, floor(lon / {PORT_DLON})::BIGINT AS c
-        FROM positions
-        WHERE nav IN (1, 5) AND sog IS NOT NULL AND sog < {STOP_KNOTS}
+        SELECT r, c FROM (
+            SELECT floor(lat / {PORT_DLAT})::BIGINT AS r, floor(lon / {PORT_DLON})::BIGINT AS c, mmsi,
+                   max(t) - min(t) AS dwell_ms
+            FROM positions
+            WHERE sog IS NOT NULL AND sog < {STOP_KNOTS}
+            GROUP BY 1, 2, 3
+        )
+        WHERE dwell_ms >= {MIN_DWELL_MS}
         GROUP BY 1, 2 HAVING count(DISTINCT mmsi) >= {MIN_VESSELS}
         """
     ).fetchall()
