@@ -1,0 +1,132 @@
+# North Wind: local stack. Nothing here is always-on in the cloud; everything runs on one machine.
+#
+#   docker compose up -d kafka topics ingest recorder      # record live AIS
+#   docker compose up -d jobmanager taskmanager-1 taskmanager-2
+#   docker compose run --rm tools python -m northwind.profile ...
+#
+# NW_DATA_DIR (in .env) is where recordings, masks, run outputs and checkpoints live. It defaults
+# to ./data; a recording is a few GB a day, so point it at a disk with room.
+
+x-py: &py
+  build: ./py
+  image: north-wind/py:dev
+  env_file: .env
+  environment:
+    NW_KAFKA: kafka:9092
+  volumes:
+    - ${NW_DATA_DIR:-./data}:/data
+  depends_on:
+    topics:
+      condition: service_completed_successfully
+
+x-flink: &flink
+  image: flink:1.20.1-java17
+  volumes:
+    - ${NW_DATA_DIR:-./data}:/data
+    - ./flink/target:/opt/flink/usrlib
+  environment:
+    FLINK_PROPERTIES: |
+      jobmanager.rpc.address: jobmanager
+      taskmanager.numberOfTaskSlots: 2
+      taskmanager.memory.process.size: 2g
+      jobmanager.memory.process.size: 1g
+      parallelism.default: 2
+      state.backend.type: hashmap
+      execution.checkpointing.dir: file:///data/checkpoints
+      state.checkpoints.dir: file:///data/checkpoints
+
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    hostname: kafka
+    ports:
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      # The recorder drains the raw topic within minutes; Kafka is a buffer here, not the archive.
+      KAFKA_LOG_RETENTION_HOURS: 48
+      KAFKA_LOG_RETENTION_BYTES: 3000000000
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
+
+  # One partition per topic: the order of `ais.raw` is the order of arrival, and a replay has to
+  # reproduce it exactly.
+  topics:
+    image: apache/kafka:3.9.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        for t in ais.raw ais.sessions; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+            --topic "$$t" --partitions 1 --replication-factor 1 --config compression.type=producer
+        done
+
+  ingest:
+    <<: *py
+    command: ["python", "-m", "northwind.ingest"]
+    restart: unless-stopped
+
+  recorder:
+    <<: *py
+    command: ["python", "-m", "northwind.record"]
+    restart: unless-stopped
+
+  tools:
+    <<: *py
+    profiles: ["tools"]
+    command: ["python", "-c", "print('use: docker compose run --rm tools python -m northwind.<module>')"]
+
+  jobmanager:
+    <<: *flink
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    profiles: ["flink"]
+
+  taskmanager-1:
+    <<: *flink
+    command: taskmanager
+    depends_on: [jobmanager]
+    profiles: ["flink"]
+
+  taskmanager-2:
+    <<: *flink
+    command: taskmanager
+    depends_on: [jobmanager]
+    profiles: ["flink"]
+
+  maven:
+    image: maven:3.9.9-eclipse-temurin-17
+    working_dir: /src
+    volumes:
+      - ./flink:/src
+      - maven-repo:/root/.m2
+    profiles: ["build"]
+    entrypoint: ["mvn", "-B", "-q"]
+    command: ["package"]
+
+volumes:
+  kafka-data:
+  maven-repo:
