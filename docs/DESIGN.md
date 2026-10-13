@@ -45,6 +45,7 @@ Every message ends in exactly one place, and the job counts them:
 
 | Fate | Decided by | Meaning |
 |---|---|---|
+| outside_window | decode | Sent before the window opened or after it closed (see below) |
 | invalid | decode, track filter | Undecodable, no position, default coordinates, out of range, stamped in the future, or an impossible jump. Kept with its reason |
 | late | late split | Event time at or behind the watermark |
 | duplicate | dedup | A transmission already seen, possibly through another receiver network |
@@ -70,6 +71,17 @@ Satellite receptions arrive tens of minutes after coastal ones. With a bound of 
 are late by construction: counted, written to `rejected/`, and left out of the detections. A bound
 long enough to admit them delays every detection by as much. The bound is a run parameter and the
 run's name records it.
+
+### Event time is bounded by the window too
+
+A window is cut on arrival time, but a message's event time can be far older: a satellite reception
+arriving at 09:46 may describe 07:55. With a watermark bound long enough to admit satellite data,
+those early positions entered the job, and every vessel whose track began with one sparse
+satellite fix and resumed with coastal reception an hour and a half later produced an AIS gap that
+never happened. On a 90-minute window a two-hour bound gave 417 gaps and 118 loitering episodes;
+with the window also applied to event time, it gives 8 gaps and none, the same as a two-minute
+bound. Messages with an event time outside the window are their own fate, `outside_window`,
+counted like the rest. The job reads the interval from the window's manifest.
 
 ### Per vessel
 
