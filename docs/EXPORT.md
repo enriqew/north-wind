@@ -25,7 +25,7 @@ Every file carries `schema_version` (currently `1`). A reader must refuse a vers
 | `manifest.json` | The window (interval, message count, sha256), the run and its lateness bound, the thresholds the detectors used, the result of each check, and the attribution lines |
 | `fates.json` | Message totals per fate, per receiving network, and invalid messages per reason |
 | `lateness.json` | Lateness (arrival minus event time) per network: quantiles and a log-binned histogram, from the window's profile and the recording |
-| `traffic.json` | Clean positions per coverage cell (0.1° × 0.2°) per hour, for the map |
+| `traffic.json` | Position reports received per coverage cell (0.1° × 0.2°) per hour of the window, from the recording, for the map |
 | `events.json` | Every detection, with the funnel fields (`underway`, `coveredStart`, `coveredEnd`, `outageOverlap`, `approached`, `truncated`) |
 | `funnels.json` | Per pattern, how many detections pass each successive filter |
 
