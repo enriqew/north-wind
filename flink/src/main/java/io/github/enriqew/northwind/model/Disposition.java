@@ -12,6 +12,12 @@ public class Disposition {
     public static final String DUPLICATE = "duplicate";
     public static final String LATE = "late";
     public static final String INVALID = "invalid";
+    /**
+     * Sent before the window opened or after it closed. A window is cut on arrival time, and late
+     * receptions inside it carry event times from before it: satellite messages up to two hours
+     * earlier. Kept, those sparse early positions open the window with gaps that never happened.
+     */
+    public static final String OUTSIDE_WINDOW = "outside_window";
 
     public String category;
     /** Why, for invalid messages; empty otherwise. */

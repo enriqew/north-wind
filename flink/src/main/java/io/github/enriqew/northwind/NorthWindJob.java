@@ -1,6 +1,8 @@
 package io.github.enriqew.northwind;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.File;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.github.enriqew.northwind.model.AisRecord;
 import io.github.enriqew.northwind.model.Disposition;
@@ -60,9 +62,15 @@ public final class NorthWindJob {
     public static void main(String[] args) throws Exception {
         ParameterTool params = ParameterTool.fromArgs(args);
         String bootstrap = params.get("bootstrap", "kafka:9092");
-        String topic = params.getRequired("topic");
+        // A window names everything a run reads: its replay topic, its masks and its interval.
+        String window = params.getRequired("window");
+        String dataDir = params.get("data", "/data");
+        String topic = params.get("topic", "replay." + window);
+        String masks = params.get("masks", dataDir + "/windows/" + window + "/masks");
         String out = params.getRequired("out");
-        String masks = params.getRequired("masks");
+        JsonNode manifest = new ObjectMapper().readTree(new File(dataDir + "/windows/" + window + "/manifest.json"));
+        long windowStartMs = manifest.get("start_ms").asLong();
+        long windowEndMs = manifest.get("end_ms").asLong();
         long boundMs = params.getLong("lateness-bound-s", 120) * 1000;
         long gapMs = params.getLong("gap-threshold-s", 3600) * 1000;
         long checkpointMs = params.getLong("checkpoint-interval-s", 30) * 1000;
@@ -85,7 +93,7 @@ public final class NorthWindJob {
         SingleOutputStreamOperator<AisRecord> decoded = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "replay")
                 .setParallelism(1)
-                .process(new DecodeFunction())
+                .process(new DecodeFunction(windowStartMs, windowEndMs))
                 .name("decode")
                 .setParallelism(1);
 
