@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Recordings and downloads live outside the repo (G:)
+data/
+*.parquet
+
+# Build output
+target/
+build/
+.gradle/
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
