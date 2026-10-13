@@ -99,6 +99,13 @@ All on clean, ordered positions.
 
 Episodes still open when the input ends are emitted with `truncated: true`.
 
+Loitering and rendezvous also carry `approached`: a vessel involved was moving (1 kn or more) within
+the hour before the episode began. In a 90-minute window, 180 of 235 rendezvous were already in
+place in the first five minutes and 190 were still in place at the end: boats moored side by side
+at quays and fish farms the port mask had not caught. 41 were approached and 7 of those were
+complete (approach, stay, part). The flag is reported, not filtered on, so the funnel stays visible.
+`VesselCleaner` keeps each vessel's last underway time and stamps it on every clean position.
+
 **Rendezvous as a spatial join.** The stream is keyed by grid cell (0.01° × 0.02°). A position goes
 to its own cell as a home visit and to every cell within 500 m of it as a visitor, so two vessels in
 range always share a cell. A pair is tracked only in the cell where the lower MMSI is at home, which
