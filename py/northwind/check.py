@@ -4,7 +4,7 @@ Conservation: every message of the window has exactly one fate. The job counts i
 fate; this check fails unless
 
     input == window messages (from the manifest)
-    input == position + static + duplicate + late + invalid
+    input == position + static + duplicate + late + invalid + outside_window
 
 It writes /data/runs/<run>/summary.json and exits non-zero on a failure.
 
@@ -20,7 +20,7 @@ from pathlib import Path
 
 from northwind.recording import DATA, Manifest
 
-FATES = ["position", "static", "duplicate", "late", "invalid"]
+FATES = ["position", "static", "duplicate", "late", "invalid", "outside_window"]
 
 
 def read_jsonl(directory: Path):
