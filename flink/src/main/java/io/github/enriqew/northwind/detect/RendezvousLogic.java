@@ -42,6 +42,7 @@ public final class RendezvousLogic implements Serializable {
         public double lat;
         public double lon;
         public Integer shipType;
+        public Long lastUnderwayMs;
 
         public Visit() {}
     }
@@ -57,6 +58,7 @@ public final class RendezvousLogic implements Serializable {
         public double lon;
         public double minDistanceM;
         public int points;
+        public boolean approached;
 
         public Pair() {}
     }
@@ -93,6 +95,7 @@ public final class RendezvousLogic implements Serializable {
                 v.lat = r.lat;
                 v.lon = r.lon;
                 v.shipType = r.shipType;
+                v.lastUnderwayMs = r.lastUnderwayMs;
                 visits.add(v);
             }
         }
@@ -130,6 +133,8 @@ public final class RendezvousLogic implements Serializable {
                     p.lat = (low.lat + high.lat) / 2;
                     p.lon = (low.lon + high.lon) / 2;
                     p.minDistanceM = d;
+                    p.approached = StopLogic.approached(low.lastUnderwayMs, together)
+                            || StopLogic.approached(high.lastUnderwayMs, together);
                     s.pairs.put(key, p);
                 }
                 p.lowType = low.shipType;
@@ -198,6 +203,7 @@ public final class RendezvousLogic implements Serializable {
         e.minDistanceM = p.minDistanceM;
         e.points = p.points;
         e.truncated = truncated;
+        e.approached = p.approached;
         return e;
     }
 }

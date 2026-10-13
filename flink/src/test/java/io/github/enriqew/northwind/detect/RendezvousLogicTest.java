@@ -61,6 +61,19 @@ class RendezvousLogicTest {
         assertEquals(60 * 60, e.durationS());
         assertTrue(e.minDistanceM < 100);
         assertTrue(e.truncated);
+        assertEquals(false, e.approached, "neither vessel was seen moving: two boats moored together");
+    }
+
+    @Test
+    void aPairIsApproachedWhenOneVesselArrivedUnderway() {
+        List<AisRecord> positions = new ArrayList<>();
+        for (int m = 0; m <= 60; m += 3) {
+            positions.add(pos(100, T0 + m * MIN, 70.10, 20.10, 0.4));
+            AisRecord arriving = pos(200, T0 + m * MIN, 70.1005, 20.1005, 0.3);
+            arriving.lastUnderwayMs = T0 - 10 * MIN;
+            positions.add(arriving);
+        }
+        assertEquals(true, run(positions).get(0).approached);
     }
 
     @Test
