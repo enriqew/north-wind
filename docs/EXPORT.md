@@ -12,7 +12,7 @@ anything unless every check below holds.
 | Determinism | `runs/<run>/rerun.json` (from `northwind.compare --out`) | A second run over the same window produced different events, rejected messages or totals |
 | Recovery | `runs/<run>-killed/recovery-vs-clean.json` | The run with a TaskManager killed differs from the clean one |
 | Exactly once | `runs/<run>-killed/recovery-vs-kafka.json` | The committed topic differs from the run's files, or holds a duplicate |
-| Same window | every file above | Any of them names another window, by sha256 |
+| Same window | the summary and the compare reports | The summary names another window's sha256, or a report compares other runs than this one, its rerun and its killed run |
 
 `scripts/run-window.sh` produces all of them.
 

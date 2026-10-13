@@ -37,7 +37,7 @@ tools northwind.check --run "$run" --window "$window" > /dev/null
 echo "conservation holds"
 echo "== rerun"
 job "$run-rerun"
-tools northwind.compare --runs "$run" "$run-rerun" > /dev/null
+tools northwind.compare --runs "$run" "$run-rerun" --out "runs/$run/rerun.json" > /dev/null
 echo "rerun identical"
 echo "== recovery"
 scripts/recovery-test.sh "$window" "$run" "$run-killed" "$bound" > /dev/null

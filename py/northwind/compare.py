@@ -86,6 +86,7 @@ def main() -> None:
     ap.add_argument("--runs", nargs="+", required=True)
     ap.add_argument("--topic")
     ap.add_argument("--create-topic", action="store_true", help="only create --topic and exit")
+    ap.add_argument("--out", help="also write the report to this path under /data")
     args = ap.parse_args()
 
     if args.create_topic:
@@ -121,6 +122,11 @@ def main() -> None:
 
     report["identical"] = ok
     print(json.dumps(report, indent=2))
+    if args.out:
+        out = DATA / args.out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(report, indent=2) + "
+")
     if not ok:
         raise SystemExit("runs differ")
 
