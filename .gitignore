@@ -18,3 +18,6 @@ __pycache__/
 # IDE
 .idea/
 .vscode/
+
+# Flink build output and test reports
+flink/target/
