@@ -18,6 +18,10 @@ import io.github.enriqew.northwind.ops.VesselPatterns;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringEncoder;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.base.DeliveryGuarantee;
+import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
+import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.file.sink.FileSink;
@@ -62,6 +66,8 @@ public final class NorthWindJob {
         long boundMs = params.getLong("lateness-bound-s", 120) * 1000;
         long gapMs = params.getLong("gap-threshold-s", 3600) * 1000;
         long checkpointMs = params.getLong("checkpoint-interval-s", 30) * 1000;
+        // Optional: also publish detections to a Kafka topic, exactly once.
+        String eventsTopic = params.get("events-topic", null);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.enableCheckpointing(checkpointMs);
@@ -115,9 +121,12 @@ public final class NorthWindJob {
         DataStream<Disposition> rejected = decoded.getSideOutput(Tags.REJECTED)
                 .union(onTime.getSideOutput(Tags.REJECTED), clean.getSideOutput(Tags.REJECTED));
 
-        vesselEvents.union(rendezvous)
-                .map(new ToJson<>()).name("events json")
-                .sinkTo(jsonl(out, "events")).name("events");
+        DataStream<String> eventsJson = vesselEvents.union(rendezvous)
+                .map(new ToJson<>()).name("events json");
+        eventsJson.sinkTo(jsonl(out, "events")).name("events");
+        if (eventsTopic != null) {
+            eventsJson.sinkTo(kafkaExactlyOnce(bootstrap, eventsTopic)).name("events to kafka");
+        }
         rejected
                 .map(new ToJson<>()).name("rejected json")
                 .sinkTo(jsonl(out, "rejected")).name("rejected");
@@ -127,6 +136,25 @@ public final class NorthWindJob {
                 .sinkTo(jsonl(out, "audit")).name("audit");
 
         env.execute("north-wind " + topic);
+    }
+
+    /**
+     * Transactional: records become visible to read_committed consumers only when the checkpoint
+     * that covers them completes. After a failure, uncommitted transactions are aborted and the
+     * job resumes from the last checkpoint, so each detection is published once.
+     */
+    private static KafkaSink<String> kafkaExactlyOnce(String bootstrap, String topic) {
+        return KafkaSink.<String>builder()
+                .setBootstrapServers(bootstrap)
+                .setRecordSerializer(KafkaRecordSerializationSchema.builder()
+                        .setTopic(topic)
+                        .setValueSerializationSchema(new SimpleStringSchema())
+                        .build())
+                .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
+                .setTransactionalIdPrefix("north-wind-" + topic)
+                // Below the broker's transaction.max.timeout.ms (15 minutes by default).
+                .setProperty("transaction.timeout.ms", "600000")
+                .build();
     }
 
     private static FileSink<String> jsonl(String out, String name) {
