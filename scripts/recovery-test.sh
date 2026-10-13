@@ -19,7 +19,7 @@ data=${data:-./data}
 docker compose run --rm --no-deps tools python -m northwind.compare --runs "$clean" --topic "$topic" --create-topic
 
 jid=$(docker compose exec -T jobmanager flink run -d /opt/flink/usrlib/north-wind.jar \
-    --topic "replay.$window" --masks "/data/windows/$window/masks" --out "/data/runs/$run" \
+    --window "$window" --out "/data/runs/$run" \
     --lateness-bound-s "$bound" --checkpoint-interval-s 1 --events-topic "$topic" \
     | sed -n 's/.*JobID \([0-9a-f]\{32\}\).*/\1/p')
 echo "job $jid"

@@ -55,7 +55,7 @@ docker compose run --rm --no-deps tools python -m northwind.profile --name w1
 
 # Run the job over it and check the run
 docker compose exec jobmanager flink run /opt/flink/usrlib/north-wind.jar \
-    --topic replay.w1 --masks /data/windows/w1/masks --out /data/runs/w1-b120 \
+    --window w1 --out /data/runs/w1-b120 \
     --lateness-bound-s 120
 docker compose run --rm --no-deps tools python -m northwind.check --run w1-b120 --window w1
 ```
