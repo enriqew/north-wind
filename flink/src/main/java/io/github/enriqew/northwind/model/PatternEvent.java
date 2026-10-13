@@ -1,0 +1,51 @@
+package io.github.enriqew.northwind.model;
+
+/** One detection. Which fields are set depends on the pattern; the rest stay null. */
+public class PatternEvent {
+    public static final String GAP = "ais_gap";
+    public static final String PORT_CALL = "port_call";
+    public static final String LOITERING = "loitering";
+    public static final String RENDEZVOUS = "rendezvous";
+
+    public String pattern;
+    public long mmsi;
+    public Integer shipType;
+    public Integer length;
+    public long startMs;
+    public long endMs;
+    public double lat;
+    public double lon;
+    public Double endLat;
+    public Double endLon;
+    /** Positions that make up the episode. */
+    public Integer points;
+    /** The episode was still open when the input ended, so its end is the end of the recording. */
+    public boolean truncated;
+
+    // ais_gap
+    public Double distanceKm;
+    public Double impliedKnots;
+    public Boolean underway;
+    public Boolean coveredStart;
+    public Boolean coveredEnd;
+    /** The ingest itself was disconnected during the gap, so the silence may be ours. */
+    public Boolean outageOverlap;
+
+    // port_call
+    public Integer portId;
+
+    // loitering
+    public Integer navStatusMode;
+    public Double maxDriftKm;
+
+    // rendezvous
+    public Long otherMmsi;
+    public Integer otherShipType;
+    public Double minDistanceM;
+
+    public PatternEvent() {}
+
+    public long durationS() {
+        return (endMs - startMs) / 1000;
+    }
+}
