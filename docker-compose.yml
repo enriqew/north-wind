@@ -24,10 +24,14 @@ x-flink: &flink
   volumes:
     - ${NW_DATA_DIR:-./data}:/data
     - ./flink/target:/opt/flink/usrlib
+    # Checkpoints on a Docker volume, not on the bind-mounted data dir: restoring heap state reads
+    # it in small chunks, and through the Windows bind mount a 16 MB restore took over ten minutes.
+    - flink-checkpoints:/checkpoints
   environment:
     FLINK_PROPERTIES: |
       jobmanager.rpc.address: jobmanager
-      taskmanager.numberOfTaskSlots: 2
+      # One slot each: a job at parallelism 2 then always spans both, and killing either one hurts.
+      taskmanager.numberOfTaskSlots: 1
       taskmanager.memory.process.size: 2g
       jobmanager.memory.process.size: 1g
       parallelism.default: 2
@@ -35,8 +39,8 @@ x-flink: &flink
       restart-strategy.fixed-delay.attempts: 3
       restart-strategy.fixed-delay.delay: 10 s
       state.backend.type: hashmap
-      execution.checkpointing.dir: file:///data/checkpoints
-      state.checkpoints.dir: file:///data/checkpoints
+      execution.checkpointing.dir: file:///checkpoints
+      state.checkpoints.dir: file:///checkpoints
 
 services:
   kafka:
@@ -131,5 +135,6 @@ services:
     command: ["package"]
 
 volumes:
+  flink-checkpoints:
   kafka-data:
   maven-repo:
