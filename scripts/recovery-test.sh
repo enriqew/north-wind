@@ -41,6 +41,8 @@ final=$(state)
 restarts=$(curl -s "$flink/jobs/$jid/exceptions" | python -c 'import sys,json; print(len(json.load(sys.stdin).get("exceptionHistory",{}).get("entries",[])))')
 echo "job $final after $restarts failure(s)"
 [ "$final" = FINISHED ] || exit 1
+# A kill that missed the job proves nothing; it happened once, with two slots per TaskManager.
+[ "$restarts" -ge 1 ] || { echo "the kill did not fail the job"; exit 1; }
 
 docker compose run --rm --no-deps tools python -m northwind.compare --runs "$clean" "$run" \
     | tee "$data/runs/$run/recovery-vs-clean.json"
