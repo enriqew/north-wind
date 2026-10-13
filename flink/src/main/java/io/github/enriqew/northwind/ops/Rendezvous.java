@@ -87,10 +87,17 @@ public final class Rendezvous {
             if (s == null) {
                 return;
             }
+            // When the input ends, the watermark jumps to the end of time and every pending close
+            // timer fires before the flush. Those timers would read "no more data" as "the vessels
+            // separated", so at the end only real data is processed and the rest is flushed as
+            // truncated.
+            boolean inputEnded = ctx.timerService().currentWatermark() == Long.MAX_VALUE;
             List<PatternEvent> events;
             if (t == Long.MAX_VALUE) {
                 events = logic.flush(s);
                 cell.clear();
+            } else if (inputEnded && !pending.contains(t)) {
+                return;
             } else {
                 List<RendezvousLogic.Visit> bucket = pending.get(t);
                 if (bucket != null) {
