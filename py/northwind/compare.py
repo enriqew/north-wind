@@ -125,8 +125,7 @@ def main() -> None:
     if args.out:
         out = DATA / args.out
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(report, indent=2) + "
-")
+        out.write_text(json.dumps(report, indent=2) + "\n")
     if not ok:
         raise SystemExit("runs differ")
 
