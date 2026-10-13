@@ -30,6 +30,8 @@ public final class StopLogic implements Serializable {
     public static final double LOITER_KNOTS = 1.5;
     public static final long LOITER_MIN_MS = 2 * 3_600_000L;
     public static final long LOITER_MAX_SILENCE_MS = 3_600_000L;
+    /** How recently a vessel must have been moving for an episode to count as approached. */
+    public static final long APPROACH_WINDOW_MS = 3_600_000L;
 
     public static class State {
         // Port call
@@ -52,6 +54,7 @@ public final class StopLogic implements Serializable {
         public Double loiterMaxDriftM;
         public Integer loiterPoints;
         public Map<Integer, Integer> navStatusCounts;
+        public Boolean loiterApproached;
 
         public Integer shipType;
         public Integer length;
@@ -116,6 +119,7 @@ public final class StopLogic implements Serializable {
                 s.loiterMaxDriftM = 0.0;
                 s.loiterPoints = 0;
                 s.navStatusCounts = new HashMap<>();
+                s.loiterApproached = approached(r.lastUnderwayMs, r.msgtimeMs);
             }
             s.loiterLastT = r.msgtimeMs;
             s.loiterLastLat = r.lat;
@@ -184,11 +188,16 @@ public final class StopLogic implements Serializable {
             e.maxDriftKm = s.loiterMaxDriftM / 1000.0;
             e.navStatusMode = mode(s.navStatusCounts);
             e.truncated = truncated;
+            e.approached = s.loiterApproached;
             out.add(e);
         }
         s.loiterStart = null;
         s.loiterLastT = null;
         s.navStatusCounts = null;
+    }
+
+    static boolean approached(Long lastUnderwayMs, long startMs) {
+        return lastUnderwayMs != null && startMs - lastUnderwayMs <= APPROACH_WINDOW_MS;
     }
 
     private static Integer mode(Map<Integer, Integer> counts) {

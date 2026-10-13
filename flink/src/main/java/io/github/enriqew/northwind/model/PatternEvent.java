@@ -21,6 +21,12 @@ public class PatternEvent {
     public Integer points;
     /** The episode was still open when the input ended, so its end is the end of the recording. */
     public boolean truncated;
+    /**
+     * Loitering and rendezvous: a vessel involved was moving (1 kn or more) within the hour before
+     * the episode began. Without it, the episode may simply be a vessel that was already stopped,
+     * or two moored side by side, when the window opened.
+     */
+    public Boolean approached;
 
     // ais_gap
     public Double distanceKm;

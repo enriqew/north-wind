@@ -97,6 +97,19 @@ class DetectorsTest {
         assertEquals(PatternEvent.LOITERING, e.pattern);
         assertEquals(150 * 60, e.durationS());
         assertEquals(16, e.points);
+        assertEquals(false, e.approached);
+    }
+
+    @Test
+    void loiteringRecordsWhetherTheVesselArrivedUnderway() {
+        StopLogic logic = new StopLogic();
+        StopLogic.State s = new StopLogic.State();
+        for (int m = 0; m <= 150; m += 10) {
+            AisRecord r = pos(9, T0 + m * MIN, SEA_LAT, SEA_LON, 0.8);
+            r.lastUnderwayMs = T0 - 20 * MIN;
+            logic.onPosition(s, r, masks);
+        }
+        assertEquals(true, logic.flush(s, 9).get(0).approached);
     }
 
     @Test
