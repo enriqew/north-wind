@@ -1,0 +1,128 @@
+# Design
+
+## Pipeline
+
+```
+BarentsWatch SSE ─► ingest ─► Kafka ais.raw (1 partition) ─► recorder ─► Parquet (the recording)
+                         └──► Kafka ais.sessions (connects and disconnects)
+
+recording window ─► replay ─► Kafka replay.<window> (1 partition, arrival order)
+                         ├──► masks: port areas, coverage, ingest outages
+                         └──► profile: rate, mix, duplicates, lateness
+
+replay.<window> ─► Flink job ─► events/   detections
+                             ├► rejected/ late and invalid messages
+                             └► audit/    one total per fate, written at end of input
+                                   └──► check: conservation, detection summary
+```
+
+Nothing reads the live stream except the ingest. Every analysis runs over a **window**: a half-open
+interval of arrival time over the recording, named by a manifest that carries its message count and
+a sha256 over its messages in arrival order. The live feed cannot be replayed; a window can, as many
+times as needed, and that is what makes a run checkable.
+
+## Ingest and recording
+
+`ingest` reads `POST /v1/sse/ais` with positions and static reports only, and writes each message's
+bytes unchanged to `ais.raw`. The arrival time goes in the Kafka record timestamp, not in the
+message: BarentsWatch's terms forbid altering the data, and the recording should be exactly what
+was received. Each connection writes an open and a close to `ais.sessions`; the token is refreshed
+by reconnecting two minutes before it expires.
+
+`recorder` drains both topics into Parquet. Each file is one contiguous range of offsets,
+`part-<first>-<last>.parquet`, written under a temporary name and renamed into place. The file names
+are the recorder's only commit log: on restart it resumes at the offset after the highest one on
+disk, so a crash can neither lose a range nor write one twice. If the topic no longer holds that
+offset, it stops rather than guess.
+
+Both topics have one partition, so topic order is arrival order.
+
+## The job
+
+### Fates
+
+Every message ends in exactly one place, and the job counts them:
+
+| Fate | Decided by | Meaning |
+|---|---|---|
+| invalid | decode, track filter | Undecodable, no position, default coordinates, out of range, stamped in the future, or an impossible jump. Kept with its reason |
+| late | late split | Event time at or behind the watermark |
+| duplicate | dedup | A transmission already seen, possibly through another receiver network |
+| static | dedup | A static report: type and length, remembered for the vessel |
+| position | track filter | A clean position, in event-time order for its vessel |
+
+The check fails unless `input` equals the window's message count and the fates sum to `input`.
+
+### Event time and lateness
+
+The watermark is bounded out-of-orderness over `msgtime`, but emitted on every event rather than
+periodically. Flink's built-in generator emits on a processing-time timer, so which messages count
+as late depends on how fast the machine happens to replay them. Emitted per event, message `n` is
+judged against the largest event time among messages `0..n-1`, on any machine, at any speed.
+
+The source, the decoder, the watermark assigner and the late split all run at parallelism 1. After
+that the work is keyed, and every keyed operator buffers by event time and acts only when the
+watermark passes, in a fixed order (offset, or MMSI then offset). Nothing downstream depends on
+which subtask delivered first. Two runs over the same window give the same output; this is checked,
+not assumed.
+
+Satellite receptions arrive tens of minutes after coastal ones. With a bound of a few minutes they
+are late by construction: counted, written to `rejected/`, and left out of the detections. A bound
+long enough to admit them delays every detection by as much. The bound is a run parameter and the
+run's name records it.
+
+### Per vessel
+
+`VesselCleaner`, keyed by MMSI:
+
+- **Dedup** on a signature of the decoded fields, excluding the receiver network: one broadcast heard
+  by a coastal station and an offshore one is one broadcast. Signatures are kept for ten minutes of
+  event time.
+- **Static reports** update the vessel's type and length, newest by event time.
+- **Ordering**: positions wait in state until the watermark passes them, then leave in event-time
+  order.
+- **Track filter**: a position that would need more than 60 knots (and more than 2 km) from the last
+  accepted one is invalid. A rejected position is kept as a candidate; if the next one agrees with
+  it rather than with the last accepted position, the track moves. Otherwise one bad anchor would
+  make every later position look impossible.
+
+### Detectors
+
+All on clean, ordered positions.
+
+| Pattern | Rule | Notes |
+|---|---|---|
+| Port call | Under 0.5 kn inside a port area for 30 min opens a call, dated from when the vessel stopped; the first position outside any port area closes it | Manoeuvring inside the port does not end the call |
+| Loitering | Under 1.5 kn outside every port area for at least 2 h | A silence over 1 h ends the episode. Fishing, towing, dredging, diving, military, pilot, SAR, tug, port tender, anti-pollution, law enforcement and medical vessels are not considered: stopping at sea is their work |
+| AIS gap | No position for at least 1 h, then a position again | Every such silence is emitted with: underway when it went quiet (≥ 1 kn), both ends inside continuous coverage, ingest outage overlapping. The funnel is reported, not hidden in a filter. A vessel that never comes back within the window is not a gap: there is no second end |
+| Rendezvous | Two vessels within 500 m, both under 1 kn, outside port areas, for at least 30 min | Towing, pilot, SAR, tug, port tender, anti-pollution and law enforcement vessels are not considered: coming alongside is their trade |
+
+Episodes still open when the input ends are emitted with `truncated: true`.
+
+**Rendezvous as a spatial join.** The stream is keyed by grid cell (0.01° × 0.02°). A position goes
+to its own cell as a home visit and to every cell within 500 m of it as a visitor, so two vessels in
+range always share a cell. A pair is tracked only in the cell where the lower MMSI is at home, which
+reports it once instead of once per shared cell. A pair is together as of the older of the two
+reports, so a vessel that has left cannot keep a pair alive with its last report from the cell.
+
+### Masks
+
+Built from the window itself (`northwind.masks`), not from an external registry:
+
+- **Port areas**: fine cells where at least three vessels each sit under 0.5 kn for 20 minutes or
+  more, grown by one cell and grouped by 8-connectivity. Stopping is measured, not declared: many
+  vessels report "under way using engine" while tied up, and a mask built on the declared status
+  missed whole fishing harbours.
+- **Coverage**: coarse cells (0.1° × 0.2°) with a coastal or offshore position in at least 90% of
+  the window's hours.
+- **Outages**: arrival-time intervals with no message for over a minute, padded by two minutes.
+
+The grid formula, `floor(lat / dlat)` and `floor(lon / dlon)`, exists in Java and Python and is
+pinned by a test on each side.
+
+## What this does not claim
+
+- An AIS gap is a fact about reception. It says nothing about why.
+- Masks come from the same window the detectors run on. That is circular by design: they describe
+  where vessels in this recording stop and where reception is continuous, not where ports are.
+- No throughput or latency figure is stated anywhere without the run it came from.
