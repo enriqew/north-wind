@@ -31,6 +31,9 @@ x-flink: &flink
       taskmanager.memory.process.size: 2g
       jobmanager.memory.process.size: 1g
       parallelism.default: 2
+      restart-strategy.type: fixed-delay
+      restart-strategy.fixed-delay.attempts: 3
+      restart-strategy.fixed-delay.delay: 10 s
       state.backend.type: hashmap
       execution.checkpointing.dir: file:///data/checkpoints
       state.checkpoints.dir: file:///data/checkpoints
