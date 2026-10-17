@@ -61,6 +61,17 @@ def test_loitering_funnel_drops_vessels_that_held_position_first():
     assert "hold position" in steps[1]["step"]
 
 
+def test_rendezvous_funnel_drops_pairs_that_held_position_first():
+    rows = [
+        event("rendezvous", 1, 0, other=2, heldPosition=True, approached=True, truncated=False),
+        event("rendezvous", 3, 0, other=4, heldPosition=False, approached=True, truncated=False),
+        event("rendezvous", 5, 0, other=6, heldPosition=False, approached=False, truncated=False),
+    ]
+    steps = export.funnels(rows)["rendezvous"]
+    assert [s["events"] for s in steps] == [3, 2, 1, 1]
+    assert "hold position" in steps[1]["step"]
+
+
 @pytest.fixture
 def data(tmp_path, monkeypatch):
     monkeypatch.setattr(export, "DATA", tmp_path)

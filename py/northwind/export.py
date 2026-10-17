@@ -155,6 +155,7 @@ def funnels(events: list[dict]) -> dict:
     out["ais_gap"] = funnel(gaps, steps)
     out["rendezvous"] = funnel(by.get("rendezvous", []), [
         ("together 30 min or more", lambda e: True),
+        ("did not both hold position (not moored or at anchor together)", lambda e: e.get("heldPosition") is False),
         ("a vessel arrived underway", lambda e: e.get("approached")),
         ("ended inside the window", lambda e: not e.get("truncated")),
     ])
