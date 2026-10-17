@@ -137,7 +137,7 @@ All on clean, ordered positions.
 | Port call | Under 0.5 kn inside a port area for 30 min opens a call, dated from when the vessel stopped; the first position outside any port area closes it | Manoeuvring inside the port does not end the call |
 | Loitering | Under 1.5 kn outside every port area for at least 2 h, without holding position | Holding position is 90% of positions within 1 km of the start: moored or at anchor. Flagged, not filtered. A silence over 1 h ends the episode. Fishing, towing, dredging, diving, military, pilot, SAR, tug, port tender, anti-pollution, law enforcement and medical vessels are not considered: stopping at sea is their work |
 | AIS gap | No position for at least 1 h, then a position again | Every such silence is emitted with: underway when it went quiet (≥ 1 kn), both ends inside continuous coverage, ingest outage overlapping. The funnel is reported, not hidden in a filter. A vessel that never comes back within the window is not a gap: there is no second end |
-| Rendezvous | Two vessels within 500 m, both under 1 kn, outside port areas, for at least 30 min | Towing, pilot, SAR, tug, port tender, anti-pollution and law enforcement vessels are not considered: coming alongside is their trade |
+| Rendezvous | Two vessels within 500 m, both under 1 kn, outside port areas, for at least 30 min, not both holding position | Holding position: both vessels within 1 km of one point since before they came together, i.e. moored or at anchor together. Flagged, not filtered. Towing, pilot, SAR, tug, port tender, anti-pollution and law enforcement vessels are not considered: coming alongside is their trade |
 
 Episodes still open when the input ends are emitted with `truncated: true`.
 
@@ -148,11 +148,24 @@ at quays and fish farms the port mask had not caught. 41 were approached and 7 o
 complete (approach, stay, part). The flag is reported, not filtered on, so the funnel stays visible.
 `VesselCleaner` keeps each vessel's last underway time and stamps it on every clean position.
 
-**Rendezvous as a spatial join.** The stream is keyed by grid cell (0.01° × 0.02°). A position goes
-to its own cell as a home visit and to every cell within 500 m of it as a visitor, so two vessels in
-range always share a cell. A pair is tracked only in the cell where the lower MMSI is at home, which
-reports it once instead of once per shared cell. A pair is together as of the older of the two
-reports, so a vessel that has left cannot keep a pair alive with its last report from the cell.
+**Rendezvous as a spatial join, then per pair.** Finding pairs is keyed by grid cell (0.01° ×
+0.02°). A position goes to its own cell as a home visit and to every cell within 500 m of it as a
+visitor, so two vessels in range always share a cell. A cell reports a sighting only when the lower
+MMSI is at home in it, which reports each pair once instead of once per shared cell. A pair is
+together as of the older of the two reports, so a vessel that has left cannot keep a pair alive
+with its last report from the cell.
+
+Episodes are kept per pair, in a second operator keyed by the two MMSIs, which buffers sightings
+by the event time of the cell batch that produced them and applies them in that order. They used
+to be kept in the cell, which cut a pair drifting together into one episode per cell it crossed
+(about one per kilometre), each too short or too still to mean anything.
+
+**Holding position.** `VesselCleaner` stamps every clean position with `heldSinceMs`: since when the
+vessel has stayed within 1 km of one point. A position outside the radius moves that point only if
+the next one is outside too, so one stray fix does not. Loitering uses the share of an episode's
+positions within 1 km of its start; rendezvous asks whether both vessels had held position since
+before the pair came together, compared with the newer report of the first sighting (a vessel first
+heard at the start of the input is held only since its own first report).
 
 ### Masks
 
@@ -173,20 +186,20 @@ pinned by a test on each side.
 
 `scripts/run-window.sh w4h 2026-10-13T10:00:00Z 2026-10-13T14:00:00Z 120`, on Docker Compose on one
 machine: two TaskManagers with one slot each, parallelism 2, heap state backend. The job read the
-window's 3,429,777 messages from Kafka in 17.9 s, and its rerun in 15.0 s. The whole script,
-replay to recovery test, took 2 min 22 s.
+window's 3,429,777 messages from Kafka in 14.9 s, and its rerun in 16.6 s. The whole script,
+replay to recovery test, took 2 min 16 s. (These are the last run, with the rendezvous change below.)
 
 | Check | Result |
 |---|---|
 | Conservation | 3,429,777 in; 3,231,990 positions, 149,745 static, 22,816 duplicates, 16,434 outside the window, 8,789 late (all satellite), 3 invalid (implied speed) |
 | Determinism | the rerun's events, rejected messages and totals are identical |
 | Recovery | a TaskManager killed after the second checkpoint; the restored run's output is identical to the clean run's |
-| Exactly once | the killed run's topic, read committed: 2,951 records, the same 2,951 as its files, no duplicates |
+| Exactly once | the killed run's topic, read committed: 2,944 records, the same 2,944 as its files, no duplicates |
 
 | Pattern | Detected | Funnel |
 |---|---|---|
 | Port call | 1,903 | 226 left inside the window |
-| Rendezvous | 291 | 129 approached, 67 of those also parted inside the window |
+| Rendezvous | 284 | 4 did not both hold position; 3 of those approached, 1 also parted inside the window |
 | AIS gap | 121 | 26 underway when they went quiet, 8 of those covered at both ends, 8 clear of an outage |
 | Loitering | 636 | 3 did not hold position, none of those arrived underway |
 
@@ -213,6 +226,23 @@ None of the three arrived underway within the window, so none passes the whole f
 candidates in four hours is the honest size of loitering on this coast once mooring and anchoring
 are taken out. A berth layer (an external quay register) would still be the better port mask; the
 flag makes the detection right without one.
+
+**Rendezvous had the same problem.** In the first runs 291 pairs were together 30 minutes or more.
+With episodes kept per pair, fragments of drifting pairs join up and there are 284. Of those, 280
+held position: boats alongside each other at quays the port mask misses, and ships anchored
+together. The 4 that moved stayed 5 to 24 m apart, so alongside, while moving together:
+
+| Types | Together | Closest | Where | Funnel |
+|---|---|---|---|---|
+| Cargo and cargo | 2 h 54 min, still open at the end | 21 m | 63.0°N 7.7°E | approached |
+| Other and other | 1 h 18 min | 24 m | 65.1°N 12.4°E | approached, parted: through every step |
+| Dredger and cargo | 2 h 40 min | 10 m | 69.0°N 15.3°E | |
+| Cargo and cargo | 2 h 42 min, still open at the end | 5 m | 68.3°N 14.9°E | approached |
+
+What holding position cannot separate is two ships at anchor together offshore, which is where a
+ship-to-ship transfer would happen, from two boats tied up at a quay. Both hold position. Telling
+them apart needs the coastline, which this project does not use yet; until then a transfer at
+anchor is counted with the moored pairs, and the funnel and the page say so.
 
 ## What this does not claim
 
