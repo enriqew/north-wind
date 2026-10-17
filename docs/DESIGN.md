@@ -187,7 +187,7 @@ pinned by a test on each side.
 `scripts/run-window.sh w4h 2026-10-13T10:00:00Z 2026-10-13T14:00:00Z 120`, on Docker Compose on one
 machine: two TaskManagers with one slot each, parallelism 2, heap state backend. The job read the
 window's 3,429,777 messages from Kafka in 14.9 s, and its rerun in 16.6 s. The whole script,
-replay to recovery test, took 2 min 16 s. (These are the last run, with the rendezvous change below.)
+replay to recovery test, took between 2 min 14 s and 2 min 22 s on the runs of this window that were timed. (The job times are the last run, with the rendezvous change below.)
 
 | Check | Result |
 |---|---|
