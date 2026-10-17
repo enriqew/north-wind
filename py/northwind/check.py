@@ -82,7 +82,7 @@ def detections(events: list[dict]) -> dict:
                         if not r.get("outageOverlap"):
                             funnel["underway_in_coverage_no_outage"] += 1
             summary["funnel"] = dict(funnel)
-        if pattern == "loitering":
+        if pattern in ("loitering", "rendezvous"):
             summary["held_position"] = sum(1 for r in rows if r.get("heldPosition"))
         if pattern in ("loitering", "rendezvous"):
             summary["approached"] = sum(1 for r in rows if r.get("approached"))
