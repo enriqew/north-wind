@@ -190,12 +190,14 @@ replay to recovery test, took 2 min 22 s.
 | AIS gap | 121 | 26 underway when they went quiet, 8 of those covered at both ends, 8 clear of an outage |
 | Loitering | 636 | 113 approached, 31 of those also ended inside the window |
 
-**Loitering, as detected, is mostly vessels tied up outside the port mask.** Every one of the 636
-episodes stayed within 0.2 km of where it started; 264 are cargo ships and 187 declare themselves
+**Loitering, as detected, is mostly vessels tied up outside the port mask.** 615 of the 636
+episodes stayed within 0.2 km of where they started; 349 are cargo ships and 187 declare themselves
 moored. The port mask needs three vessels stopped in the same cell to call it a port, so a quay
 with one berth, an industrial jetty or a fish farm is not one, and a ship alongside it for two
 hours is "slow outside every port area". The 31 that pass the funnel look like the same thing seen
-whole: a vessel arrives, stays put within 200 m, and leaves. Drift at sea would show; none does.
+whole: a vessel arrives, stays put within 200 m, and leaves. Drift at sea would show, and 21
+episodes do drift more than 0.2 km (the furthest 3.5 km); those are the candidates worth a look,
+none of them among the 31.
 The detector does what its rule says. What it needs is a port layer that knows about single berths
 (an external quay register, or a mask threshold of one vessel with a longer dwell), and until then
 the page reports the funnel and says this.
