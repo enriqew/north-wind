@@ -21,6 +21,11 @@ import java.util.Map;
  * because nothing is known about what the vessel did in it. Vessels whose work is to stop at sea
  * (fishing, tugs, pilots, SAR...) are not considered, see {@link VesselTypes}.
  *
+ * <p>Every episode carries {@code heldPosition}: at least {@link #HOLD_SHARE} of its positions within
+ * {@link #HOLD_RADIUS_M} of where it began. A vessel that holds position is moored or at anchor, and
+ * the port mask, built from where several vessels stop, misses single berths and anchorages. The
+ * flag is reported rather than filtered on, like the AIS gap funnel.
+ *
  * <p>Input must be one vessel's positions in event-time order.
  */
 public final class StopLogic implements Serializable {
@@ -30,6 +35,9 @@ public final class StopLogic implements Serializable {
     public static final double LOITER_KNOTS = 1.5;
     public static final long LOITER_MIN_MS = 2 * 3_600_000L;
     public static final long LOITER_MAX_SILENCE_MS = 3_600_000L;
+    /** Larger than the swing of a big ship at anchor (chain plus length), smaller than a drift of two hours. */
+    public static final double HOLD_RADIUS_M = 1_000.0;
+    public static final double HOLD_SHARE = 0.9;
     /** How recently a vessel must have been moving for an episode to count as approached. */
     public static final long APPROACH_WINDOW_MS = 3_600_000L;
 
@@ -53,6 +61,7 @@ public final class StopLogic implements Serializable {
         public Double loiterLastLon;
         public Double loiterMaxDriftM;
         public Integer loiterPoints;
+        public Integer loiterFarPoints;
         public Map<Integer, Integer> navStatusCounts;
         public Boolean loiterApproached;
 
@@ -118,6 +127,7 @@ public final class StopLogic implements Serializable {
                 s.loiterLon = r.lon;
                 s.loiterMaxDriftM = 0.0;
                 s.loiterPoints = 0;
+                s.loiterFarPoints = 0;
                 s.navStatusCounts = new HashMap<>();
                 s.loiterApproached = approached(r.lastUnderwayMs, r.msgtimeMs);
             }
@@ -125,7 +135,11 @@ public final class StopLogic implements Serializable {
             s.loiterLastLat = r.lat;
             s.loiterLastLon = r.lon;
             s.loiterPoints++;
-            s.loiterMaxDriftM = Math.max(s.loiterMaxDriftM, Geo.haversineM(s.loiterLat, s.loiterLon, r.lat, r.lon));
+            double fromStartM = Geo.haversineM(s.loiterLat, s.loiterLon, r.lat, r.lon);
+            s.loiterMaxDriftM = Math.max(s.loiterMaxDriftM, fromStartM);
+            if (fromStartM > HOLD_RADIUS_M) {
+                s.loiterFarPoints++;
+            }
             if (r.navStatus != null) {
                 s.navStatusCounts.merge(r.navStatus, 1, Integer::sum);
             }
@@ -186,6 +200,7 @@ public final class StopLogic implements Serializable {
             e.endLon = s.loiterLastLon;
             e.points = s.loiterPoints;
             e.maxDriftKm = s.loiterMaxDriftM / 1000.0;
+            e.heldPosition = heldPosition(s.loiterPoints, s.loiterFarPoints);
             e.navStatusMode = mode(s.navStatusCounts);
             e.truncated = truncated;
             e.approached = s.loiterApproached;
@@ -194,6 +209,10 @@ public final class StopLogic implements Serializable {
         s.loiterStart = null;
         s.loiterLastT = null;
         s.navStatusCounts = null;
+    }
+
+    static boolean heldPosition(int points, int farPoints) {
+        return points - farPoints >= HOLD_SHARE * points;
     }
 
     static boolean approached(Long lastUnderwayMs, long startMs) {

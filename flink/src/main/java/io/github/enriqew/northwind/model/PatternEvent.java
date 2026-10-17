@@ -43,6 +43,8 @@ public class PatternEvent {
     // loitering
     public Integer navStatusMode;
     public Double maxDriftKm;
+    /** Stayed within a kilometre of where it began: moored or at anchor, not loitering. */
+    public Boolean heldPosition;
 
     // rendezvous
     public Long otherMmsi;

@@ -113,6 +113,33 @@ class DetectorsTest {
     }
 
     @Test
+    void aVesselThatStaysPutHoldsPositionAndADriftingOneDoesNot() {
+        StopLogic logic = new StopLogic();
+        StopLogic.State moored = new StopLogic.State();
+        StopLogic.State drifting = new StopLogic.State();
+        for (int m = 0; m <= 150; m += 10) {
+            // Moored: GPS noise of a few metres. Drifting: 0.5 kn north, about 2.3 km in 150 minutes.
+            logic.onPosition(moored, pos(10, T0 + m * MIN, SEA_LAT + (m % 20 == 0 ? 2e-5 : -2e-5), SEA_LON, 0.1), masks);
+            logic.onPosition(drifting, pos(11, T0 + m * MIN, SEA_LAT + m * 0.5 * 1852 / 60 / 111_320.0, SEA_LON, 0.5), masks);
+        }
+        assertEquals(true, logic.flush(moored, 10).get(0).heldPosition);
+        PatternEvent d = logic.flush(drifting, 11).get(0);
+        assertEquals(false, d.heldPosition);
+        assertTrue(d.maxDriftKm > 2.0);
+    }
+
+    @Test
+    void oneStrayPositionDoesNotUndoHoldingPosition() {
+        StopLogic logic = new StopLogic();
+        StopLogic.State s = new StopLogic.State();
+        for (int m = 0; m <= 150; m += 10) {
+            double lat = m == 70 ? SEA_LAT + 0.015 : SEA_LAT; // one fix 1.7 km off, inside the track filter's tolerance
+            logic.onPosition(s, pos(12, T0 + m * MIN, lat, SEA_LON, 0.2), masks);
+        }
+        assertEquals(true, logic.flush(s, 12).get(0).heldPosition);
+    }
+
+    @Test
     void fishingVesselsAreNotLoitering() {
         StopLogic logic = new StopLogic();
         StopLogic.State s = new StopLogic.State();
