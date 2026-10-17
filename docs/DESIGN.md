@@ -54,8 +54,8 @@ The window `w4h` (10:00 to 14:00, 3,429,777 messages, `northwind.profile`):
 |---|---|---|---|
 | Messages | 3,281,108 | 108,023 | 40,646 |
 | Lateness p50 | 3.2 s | 1.9 s | 1 h 39 min |
-| Lateness p99 | 4.6 s | 2.9 s | see below |
-| Lateness max | 20.9 s | 4.8 s | see below |
+| Lateness p99 | 4.6 s | 2.9 s | n/a, see below |
+| Lateness max | 20.9 s | 4.8 s | n/a, see below |
 | More than 120 s behind the latest event time | 0 | 0 | 61% |
 
 Per minute the rate ran from 13,585 (p1) to 15,896 (p99) messages, from 4,399 distinct MMSIs. The
@@ -168,6 +168,37 @@ Built from the window itself (`northwind.masks`), not from an external registry:
 
 The grid formula, `floor(lat / dlat)` and `floor(lon / dlon)`, exists in Java and Python and is
 pinned by a test on each side.
+
+## The four-hour window
+
+`scripts/run-window.sh w4h 2026-10-13T10:00:00Z 2026-10-13T14:00:00Z 120`, on Docker Compose on one
+machine: two TaskManagers with one slot each, parallelism 2, heap state backend. The job read the
+window's 3,429,777 messages from Kafka in 17.9 s, and its rerun in 15.0 s. The whole script,
+replay to recovery test, took 2 min 22 s.
+
+| Check | Result |
+|---|---|
+| Conservation | 3,429,777 in; 3,231,990 positions, 149,745 static, 22,816 duplicates, 16,434 outside the window, 8,789 late (all satellite), 3 invalid (implied speed) |
+| Determinism | the rerun's events, rejected messages and totals are identical |
+| Recovery | a TaskManager killed after the second checkpoint; the restored run's output is identical to the clean run's |
+| Exactly once | the killed run's topic, read committed: 2,951 records, the same 2,951 as its files, no duplicates |
+
+| Pattern | Detected | Funnel |
+|---|---|---|
+| Port call | 1,903 | 226 left inside the window |
+| Rendezvous | 291 | 129 approached, 67 of those also parted inside the window |
+| AIS gap | 121 | 26 underway when they went quiet, 8 of those covered at both ends, 8 clear of an outage |
+| Loitering | 636 | 113 approached, 31 of those also ended inside the window |
+
+**Loitering, as detected, is mostly vessels tied up outside the port mask.** Every one of the 636
+episodes stayed within 0.2 km of where it started; 264 are cargo ships and 187 declare themselves
+moored. The port mask needs three vessels stopped in the same cell to call it a port, so a quay
+with one berth, an industrial jetty or a fish farm is not one, and a ship alongside it for two
+hours is "slow outside every port area". The 31 that pass the funnel look like the same thing seen
+whole: a vessel arrives, stays put within 200 m, and leaves. Drift at sea would show; none does.
+The detector does what its rule says. What it needs is a port layer that knows about single berths
+(an external quay register, or a mask threshold of one vessel with a longer dwell), and until then
+the page reports the funnel and says this.
 
 ## What this does not claim
 
