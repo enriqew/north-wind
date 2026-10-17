@@ -107,6 +107,12 @@ with the window also applied to event time, it gives 8 gaps and none, the same a
 bound. Messages with an event time outside the window are their own fate, `outside_window`,
 counted like the rest. The job reads the interval from the window's manifest.
 
+The bound also absorbs a fault in the feed. In the four-hour window 7,471 satellite messages (18%
+of the window's satellite traffic, from 1,964 vessels) carry an event time between 00:15 and 01:38
+UTC on 2014-01-01: a receiver clock reset to its default, not a time. That is why the satellite
+lateness quantiles past p50 read as twelve years. The messages are kept as received, end as
+`outside_window`, and never reach a detector.
+
 ### Per vessel
 
 `VesselCleaner`, keyed by MMSI:
