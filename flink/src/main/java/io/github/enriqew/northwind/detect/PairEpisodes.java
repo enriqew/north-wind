@@ -15,6 +15,8 @@ public final class PairEpisodes implements Serializable {
 
     public static class State {
         public Long startT;
+        /** The newer report of the first sighting: each vessel's own first report together is at or before it. */
+        public long startNewer;
         public long lastT;
         public double lat;
         public double lon;
@@ -37,6 +39,7 @@ public final class PairEpisodes implements Serializable {
         }
         if (s.startT == null) {
             s.startT = g.together;
+            s.startNewer = g.newer;
             s.lastT = g.together;
             s.lat = g.lat;
             s.lon = g.lon;
@@ -72,9 +75,14 @@ public final class PairEpisodes implements Serializable {
         return s.lastT + RendezvousLogic.SEPARATION_MS + 1;
     }
 
+    /**
+     * Both vessels held position since the pair came together. Compared with the newer report of the
+     * first sighting, not with the start: the start is the older report, and a vessel first heard at
+     * the beginning of the input is held only since its own first report, a few seconds later.
+     */
     static boolean heldPosition(State s) {
         return s.lowHeldSinceMs != null && s.highHeldSinceMs != null
-                && Math.max(s.lowHeldSinceMs, s.highHeldSinceMs) <= s.startT;
+                && Math.max(s.lowHeldSinceMs, s.highHeldSinceMs) <= s.startNewer;
     }
 
     private static PatternEvent close(State s, long low, long high, boolean truncated) {

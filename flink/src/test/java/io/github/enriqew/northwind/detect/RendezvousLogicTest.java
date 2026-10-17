@@ -112,6 +112,17 @@ class RendezvousLogicTest {
     }
 
     @Test
+    void aMooredPairFirstHeardAtDifferentTimesStillHeldPosition() {
+        List<AisRecord> positions = new ArrayList<>();
+        for (int m = 0; m <= 60; m += 3) {
+            // The input starts with both alongside; vessel 200 is first heard 40 s after vessel 100.
+            positions.add(pos(100, T0 + m * MIN, 70.10, 20.10, 0.1));
+            positions.add(pos(200, T0 + m * MIN + 40_000, 70.1005, 20.1005, 0.1));
+        }
+        assertEquals(true, run(positions).get(0).heldPosition);
+    }
+
+    @Test
     void aPairDriftingTogetherDidNotHoldPosition() {
         List<AisRecord> positions = new ArrayList<>();
         for (int m = 0; m <= 120; m += 1) {

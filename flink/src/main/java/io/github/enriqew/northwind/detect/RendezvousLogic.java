@@ -68,6 +68,8 @@ public final class RendezvousLogic implements Serializable {
         public long at;
         /** The older of the two reports: the pair is known to be together as of then. */
         public long together;
+        /** The newer of the two reports. */
+        public long newer;
         public double lat;
         public double lon;
         public double distanceM;
@@ -156,6 +158,7 @@ public final class RendezvousLogic implements Serializable {
                 // Together as of the older of the two reports. Using the current time instead let a
                 // vessel that had already left keep a pair alive with its last report from this cell.
                 g.together = Math.min(v.t, u.t);
+                g.newer = Math.max(v.t, u.t);
                 g.lat = (low.lat + high.lat) / 2;
                 g.lon = (low.lon + high.lon) / 2;
                 g.distanceM = d;
