@@ -37,6 +37,30 @@ offset, it stops rather than guess.
 
 Both topics have one partition, so topic order is arrival order.
 
+### Measured
+
+One recording, 2026-10-13 09:43 to 14:27 UTC (4 h 44 min), read back from the Parquet files:
+
+| | |
+|---|---|
+| Messages | 4,066,561, 238 per second on average |
+| On disk | 113 MB of zstd Parquet, 28 bytes per message, about 575 MB a day |
+| Mix | 91.3% terrestrial positions, 4.4% static reports, 3.0% offshore and 1.2% satellite positions |
+| Connections | 6 sessions: 4 closed for the hourly token refresh, 1 by the server mid-stream; each reconnect took 1 to 2 s |
+
+The window `w4h` (10:00 to 14:00, 3,429,777 messages, `northwind.profile`):
+
+| | Terrestrial | Offshore | Satellite |
+|---|---|---|---|
+| Messages | 3,281,108 | 108,023 | 40,646 |
+| Lateness p50 | 3.2 s | 1.9 s | 1 h 39 min |
+| Lateness p99 | 4.6 s | 2.9 s | see below |
+| Lateness max | 20.9 s | 4.8 s | see below |
+| More than 120 s behind the latest event time | 0 | 0 | 61% |
+
+Per minute the rate ran from 13,585 (p1) to 15,896 (p99) messages, from 4,399 distinct MMSIs. The
+job counted 22,816 duplicates (0.7%), nearly all one broadcast heard by two terrestrial stations.
+
 ## The job
 
 ### Fates
