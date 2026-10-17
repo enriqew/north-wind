@@ -34,6 +34,9 @@ public class AisRecord {
     /** Last event time this vessel was seen at 1 knot or more, up to and including this position. */
     public Long lastUnderwayMs;
 
+    /** Since when this vessel has stayed within a kilometre of one point, up to and including this position. */
+    public Long heldSinceMs;
+
     public AisRecord() {}
 
     public boolean isPosition() {
@@ -68,6 +71,7 @@ public class AisRecord {
         r.shipType = shipType;
         r.length = length;
         r.lastUnderwayMs = lastUnderwayMs;
+        r.heldSinceMs = heldSinceMs;
         return r;
     }
 }

@@ -1,5 +1,6 @@
 package io.github.enriqew.northwind.ops;
 
+import io.github.enriqew.northwind.detect.HoldTracker;
 import io.github.enriqew.northwind.detect.TrackFilter;
 import io.github.enriqew.northwind.model.AisRecord;
 import io.github.enriqew.northwind.model.Disposition;
@@ -33,6 +34,7 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
     static final double UNDERWAY_KNOTS = 1.0;
 
     private final TrackFilter trackFilter = new TrackFilter();
+    private final HoldTracker holdTracker = new HoldTracker();
 
     private transient MapState<String, Long> seen;
     private transient MapState<Long, List<AisRecord>> pending;
@@ -41,6 +43,7 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
     private transient ValueState<Long> staticTime;
     private transient ValueState<TrackFilter.State> track;
     private transient ValueState<Long> lastUnderway;
+    private transient ValueState<HoldTracker.State> hold;
 
     @Override
     public void open(Configuration parameters) {
@@ -53,6 +56,8 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
         track = getRuntimeContext().getState(
                 new ValueStateDescriptor<>("track", Types.POJO(TrackFilter.State.class)));
         lastUnderway = getRuntimeContext().getState(new ValueStateDescriptor<>("lastUnderway", Types.LONG));
+        hold = getRuntimeContext().getState(
+                new ValueStateDescriptor<>("hold", Types.POJO(HoldTracker.State.class)));
     }
 
     @Override
@@ -99,6 +104,10 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
             if (s == null) {
                 s = new TrackFilter.State();
             }
+            HoldTracker.State h = hold.value();
+            if (h == null) {
+                h = new HoldTracker.State();
+            }
             for (AisRecord r : bucket) {
                 if (trackFilter.accept(s, r)) {
                     AisRecord enriched = r.copy();
@@ -108,6 +117,7 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
                         lastUnderway.update(r.msgtimeMs);
                     }
                     enriched.lastUnderwayMs = lastUnderway.value();
+                    enriched.heldSinceMs = holdTracker.update(h, r.lat, r.lon, r.msgtimeMs);
                     out.collect(enriched);
                     ctx.output(Tags.AUDIT, Disposition.of(Disposition.POSITION, null, r));
                 } else {
@@ -117,6 +127,7 @@ public class VesselCleaner extends KeyedProcessFunction<Long, AisRecord, AisReco
                 }
             }
             track.update(s);
+            hold.update(h);
         }
         if (t % MINUTE_MS == 0) {
             long cutoff = t - DEDUP_HORIZON_MS;
