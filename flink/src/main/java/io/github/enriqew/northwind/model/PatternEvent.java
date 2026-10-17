@@ -43,7 +43,10 @@ public class PatternEvent {
     // loitering
     public Integer navStatusMode;
     public Double maxDriftKm;
-    /** Stayed within a kilometre of where it began: moored or at anchor, not loitering. */
+    /**
+     * Loitering: stayed within a kilometre of where it began. Rendezvous: both vessels had held
+     * position since before they came together. Either way, moored or at anchor.
+     */
     public Boolean heldPosition;
 
     // rendezvous

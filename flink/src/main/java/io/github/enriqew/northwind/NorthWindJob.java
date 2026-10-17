@@ -47,7 +47,7 @@ import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.
  *   -> late split                                late    -> audit, rejected
  *   -> keyBy mmsi: dedup, static, order, track   duplicate/static/implied_speed -> audit
  *   -> keyBy mmsi: gaps, port calls, loitering   -> events
- *   -> keyBy cell: rendezvous                    -> events
+ *   -> keyBy cell: pairs within 500 m            -> keyBy pair: rendezvous episodes -> events
  * audit -> keyBy category: totals at end of input -> audit
  * </pre>
  *
@@ -122,7 +122,10 @@ public final class NorthWindJob {
                 .name("route to cells")
                 .keyBy(v -> v.cell)
                 .process(new Rendezvous.CellFunction())
-                .name("rendezvous");
+                .name("rendezvous: pairs per cell")
+                .keyBy(g -> g.pairKey())
+                .process(new Rendezvous.PairFunction())
+                .name("rendezvous: episodes per pair");
 
         DataStream<Disposition> audit = decoded.getSideOutput(Tags.AUDIT)
                 .union(onTime.getSideOutput(Tags.AUDIT), clean.getSideOutput(Tags.AUDIT));
