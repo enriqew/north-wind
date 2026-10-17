@@ -135,7 +135,7 @@ All on clean, ordered positions.
 | Pattern | Rule | Notes |
 |---|---|---|
 | Port call | Under 0.5 kn inside a port area for 30 min opens a call, dated from when the vessel stopped; the first position outside any port area closes it | Manoeuvring inside the port does not end the call |
-| Loitering | Under 1.5 kn outside every port area for at least 2 h | A silence over 1 h ends the episode. Fishing, towing, dredging, diving, military, pilot, SAR, tug, port tender, anti-pollution, law enforcement and medical vessels are not considered: stopping at sea is their work |
+| Loitering | Under 1.5 kn outside every port area for at least 2 h, without holding position | Holding position is 90% of positions within 1 km of the start: moored or at anchor. Flagged, not filtered. A silence over 1 h ends the episode. Fishing, towing, dredging, diving, military, pilot, SAR, tug, port tender, anti-pollution, law enforcement and medical vessels are not considered: stopping at sea is their work |
 | AIS gap | No position for at least 1 h, then a position again | Every such silence is emitted with: underway when it went quiet (≥ 1 kn), both ends inside continuous coverage, ingest outage overlapping. The funnel is reported, not hidden in a filter. A vessel that never comes back within the window is not a gap: there is no second end |
 | Rendezvous | Two vessels within 500 m, both under 1 kn, outside port areas, for at least 30 min | Towing, pilot, SAR, tug, port tender, anti-pollution and law enforcement vessels are not considered: coming alongside is their trade |
 
@@ -188,19 +188,31 @@ replay to recovery test, took 2 min 22 s.
 | Port call | 1,903 | 226 left inside the window |
 | Rendezvous | 291 | 129 approached, 67 of those also parted inside the window |
 | AIS gap | 121 | 26 underway when they went quiet, 8 of those covered at both ends, 8 clear of an outage |
-| Loitering | 636 | 113 approached, 31 of those also ended inside the window |
+| Loitering | 636 | 3 did not hold position, none of those arrived underway |
 
-**Loitering, as detected, is mostly vessels tied up outside the port mask.** 615 of the 636
+**Loitering, as first detected, was mostly vessels tied up outside the port mask.** 615 of the 636
 episodes stayed within 0.2 km of where they started; 349 are cargo ships and 187 declare themselves
 moored. The port mask needs three vessels stopped in the same cell to call it a port, so a quay
-with one berth, an industrial jetty or a fish farm is not one, and a ship alongside it for two
-hours is "slow outside every port area". The 31 that pass the funnel look like the same thing seen
-whole: a vessel arrives, stays put within 200 m, and leaves. Drift at sea would show, and 21
-episodes do drift more than 0.2 km (the furthest 3.5 km); those are the candidates worth a look,
-none of them among the 31.
-The detector does what its rule says. What it needs is a port layer that knows about single berths
-(an external quay register, or a mask threshold of one vessel with a longer dwell), and until then
-the page reports the funnel and says this.
+with one berth, an industrial jetty or an anchorage used by one ship at a time is not one, and a
+ship alongside it for two hours is "slow outside every port area".
+
+The detector now flags `heldPosition`: at least 90% of the episode's positions within 1 km of where
+it began. A kilometre is wider than a large ship's swing at anchor and narrower than two hours of
+drift at half a knot; counting the share outside it rather than the furthest fix keeps one stray
+position from undoing it. The flag is the funnel's first step after detection, not a filter. Rerun
+on the same window (same sha256, all four checks again), 633 of the 636 held position and 3 did
+not:
+
+| Type | Moved | Over | Where |
+|---|---|---|---|
+| Other (90) | 2.3 km | 2 h 18 min, 820 positions | North Sea, 56.4°N 3.0°E, in the Ekofisk area |
+| Cargo | 1.6 km | 2 h 01 min, 1,116 positions | Off Tromsø, 69.8°N 19.2°E |
+| Unknown | 3.5 km | 3 h 56 min, 38 positions, still open at the end | Near Tromsø, 69.6°N 18.0°E |
+
+None of the three arrived underway within the window, so none passes the whole funnel. Three
+candidates in four hours is the honest size of loitering on this coast once mooring and anchoring
+are taken out. A berth layer (an external quay register) would still be the better port mask; the
+flag makes the detection right without one.
 
 ## What this does not claim
 
