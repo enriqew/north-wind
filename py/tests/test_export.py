@@ -48,6 +48,19 @@ def test_gap_funnel_counts_each_step():
     assert [s["events"] for s in export.funnels(gaps)["ais_gap"]] == [4, 3, 2, 1]
 
 
+def test_loitering_funnel_drops_vessels_that_held_position_first():
+    rows = [
+        event("loitering", 1, 0, heldPosition=True, approached=True, truncated=False),
+        event("loitering", 2, 0, heldPosition=False, approached=True, truncated=False),
+        event("loitering", 3, 0, heldPosition=False, approached=False, truncated=False),
+        event("loitering", 4, 0, heldPosition=False, approached=True, truncated=True),
+        event("loitering", 5, 0),  # an older job without the flag: not counted as moving
+    ]
+    steps = export.funnels(rows)["loitering"]
+    assert [s["events"] for s in steps] == [5, 3, 2, 1]
+    assert "hold position" in steps[1]["step"]
+
+
 @pytest.fixture
 def data(tmp_path, monkeypatch):
     monkeypatch.setattr(export, "DATA", tmp_path)

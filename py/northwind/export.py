@@ -30,7 +30,7 @@ ATTRIBUTION = [
 THRESHOLDS = {
     "ais_gap": {"min_silence_min": 60, "underway_kn": 1.0},
     "port_call": {"stop_kn": 0.5, "dwell_min": 30},
-    "loitering": {"max_kn": 1.5, "min_duration_min": 120, "max_silence_min": 60},
+    "loitering": {"max_kn": 1.5, "min_duration_min": 120, "max_silence_min": 60, "hold_radius_m": 1000, "hold_share": 0.9},
     "rendezvous": {"radius_m": 500, "max_kn": 1.0, "min_duration_min": 30, "separation_min": 15},
     "approached": {"moving_kn": 1.0, "within_min": 60},
     "track_filter": {"max_kn": 60, "min_jump_m": 2000},
@@ -135,7 +135,7 @@ def anonymise(events: list[dict]) -> list[dict]:
         ]:
             if e.get(src) is not None:
                 row[dst] = round(e[src], digits)
-        for key in ("underway", "coveredStart", "coveredEnd", "outageOverlap", "approached", "portId", "navStatusMode"):
+        for key in ("underway", "coveredStart", "coveredEnd", "outageOverlap", "approached", "heldPosition", "portId", "navStatusMode"):
             if e.get(key) is not None:
                 row[key] = e[key]
         out.append(row)
@@ -153,12 +153,17 @@ def funnels(events: list[dict]) -> dict:
              ("both ends in continuous coverage", lambda e: e.get("coveredStart") and e.get("coveredEnd")),
              ("no ingest outage during it", lambda e: not e.get("outageOverlap"))]
     out["ais_gap"] = funnel(gaps, steps)
-    for pattern, first in [("rendezvous", "together 30 min or more"), ("loitering", "slow outside port 2 h or more")]:
-        out[pattern] = funnel(by.get(pattern, []), [
-            (first, lambda e: True),
-            ("a vessel arrived underway", lambda e: e.get("approached")),
-            ("ended inside the window", lambda e: not e.get("truncated")),
-        ])
+    out["rendezvous"] = funnel(by.get("rendezvous", []), [
+        ("together 30 min or more", lambda e: True),
+        ("a vessel arrived underway", lambda e: e.get("approached")),
+        ("ended inside the window", lambda e: not e.get("truncated")),
+    ])
+    out["loitering"] = funnel(by.get("loitering", []), [
+        ("slow outside port 2 h or more", lambda e: True),
+        ("did not hold position (not moored or at anchor)", lambda e: e.get("heldPosition") is False),
+        ("arrived underway", lambda e: e.get("approached")),
+        ("ended inside the window", lambda e: not e.get("truncated")),
+    ])
     out["port_call"] = funnel(by.get("port_call", []), [
         ("stopped in a port area 30 min or more", lambda e: True),
         ("left inside the window", lambda e: not e.get("truncated")),
