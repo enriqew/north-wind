@@ -48,6 +48,13 @@ public class PatternEvent {
      * position since before they came together. Either way, moored or at anchor.
      */
     public Boolean heldPosition;
+    /**
+     * Loitering and rendezvous: where the episode began relative to the shore, quay, coast, near or
+     * open (see {@code Shore}). Holding position at the shore is moored; in open water, at anchor.
+     */
+    public String shore;
+    /** Metres from where the episode began to the nearest coast, built or natural; null beyond a cell. */
+    public Double shoreM;
 
     // rendezvous
     public Long otherMmsi;

@@ -14,6 +14,7 @@ import io.github.enriqew.northwind.ops.LateSplitter;
 import io.github.enriqew.northwind.ops.PunctuatedBoundedWatermarks;
 import io.github.enriqew.northwind.ops.RawMessageDeserializer;
 import io.github.enriqew.northwind.ops.Rendezvous;
+import io.github.enriqew.northwind.ops.ShoreTagger;
 import io.github.enriqew.northwind.ops.Tags;
 import io.github.enriqew.northwind.ops.VesselCleaner;
 import io.github.enriqew.northwind.ops.VesselPatterns;
@@ -48,6 +49,7 @@ import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.
  *   -> keyBy mmsi: dedup, static, order, track   duplicate/static/implied_speed -> audit
  *   -> keyBy mmsi: gaps, port calls, loitering   -> events
  *   -> keyBy cell: pairs within 500 m            -> keyBy pair: rendezvous episodes -> events
+ * events -> distance to the shore (loitering, rendezvous)
  * audit -> keyBy category: totals at end of input -> audit
  * </pre>
  *
@@ -133,6 +135,7 @@ public final class NorthWindJob {
                 .union(onTime.getSideOutput(Tags.REJECTED), clean.getSideOutput(Tags.REJECTED));
 
         DataStream<String> eventsJson = vesselEvents.union(rendezvous)
+                .map(new ShoreTagger(masks)).name("distance to the shore").setParallelism(1)
                 .map(new ToJson<>()).name("events json");
         eventsJson.sinkTo(jsonl(out, "events")).name("events");
         if (eventsTopic != null) {
