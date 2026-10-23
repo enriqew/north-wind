@@ -8,6 +8,7 @@ BarentsWatch SSE ─► ingest ─► Kafka ais.raw (1 partition) ─► recorde
 
 recording window ─► replay ─► Kafka replay.<window> (1 partition, arrival order)
                          ├──► masks: port areas, coverage, ingest outages
+                         ├──► shore: coast and fish farms near slow vessels (Kartverket, Fiskeridirektoratet)
                          └──► profile: rate, mix, duplicates, lateness
 
 replay.<window> ─► Flink job ─► events/   detections
@@ -135,9 +136,9 @@ All on clean, ordered positions.
 | Pattern | Rule | Notes |
 |---|---|---|
 | Port call | Under 0.5 kn inside a port area for 30 min opens a call, dated from when the vessel stopped; the first position outside any port area closes it | Manoeuvring inside the port does not end the call |
-| Loitering | Under 1.5 kn outside every port area for at least 2 h, without holding position | Holding position is 90% of positions within 1 km of the start: moored or at anchor. Flagged, not filtered. A silence over 1 h ends the episode. Fishing, towing, dredging, diving, military, pilot, SAR, tug, port tender, anti-pollution, law enforcement and medical vessels are not considered: stopping at sea is their work |
+| Loitering | Under 1.5 kn outside every port area for at least 2 h, without holding position at the shore or at a fish farm | Holding position is 90% of positions within 1 km of the start. Where the episode began is measured against the coast and the licensed fish farms. All flagged, not filtered. A silence over 1 h ends the episode. Fishing, towing, dredging, diving, military, pilot, SAR, tug, port tender, anti-pollution, law enforcement and medical vessels are not considered: stopping at sea is their work |
 | AIS gap | No position for at least 1 h, then a position again | Every such silence is emitted with: underway when it went quiet (≥ 1 kn), both ends inside continuous coverage, ingest outage overlapping. The funnel is reported, not hidden in a filter. A vessel that never comes back within the window is not a gap: there is no second end |
-| Rendezvous | Two vessels within 500 m, both under 1 kn, outside port areas, for at least 30 min, not both holding position | Holding position: both vessels within 1 km of one point since before they came together, i.e. moored or at anchor together. Flagged, not filtered. Towing, pilot, SAR, tug, port tender, anti-pollution and law enforcement vessels are not considered: coming alongside is their trade |
+| Rendezvous | Two vessels within 500 m, both under 1 kn, outside port areas, for at least 30 min, not both holding position at the shore, not at a fish farm | Holding position: both vessels within 1 km of one point since before they came together. Shore and fish farm as for loitering. All flagged, not filtered. Towing, pilot, SAR, tug, port tender, anti-pollution and law enforcement vessels are not considered: coming alongside is their trade |
 
 Episodes still open when the input ends are emitted with `truncated: true`.
 
@@ -167,6 +168,14 @@ positions within 1 km of its start; rendezvous asks whether both vessels had hel
 before the pair came together, compared with the newer report of the first sighting (a vessel first
 heard at the start of the input is held only since its own first report).
 
+**Where it held position.** Holding position says moored or at anchor, not which. A last operator,
+at parallelism 1 and without state, stamps every loitering and rendezvous episode with where it
+began: `quay` within 50 m of a built coast (quay, pier, jetty, breakwater), `coast` within 50 m of
+the natural coastline, `near` within 200 m, `open` beyond; and `atFarm`, within 200 m of a licensed
+fish farm. Held at the shore is moored. Held in open water is at anchor or holding station, which
+is where a transfer between two ships would happen, so it stays a candidate. The 50 to 200 m band is
+left undecided.
+
 ### Masks
 
 Built from the window itself (`northwind.masks`), not from an external registry:
@@ -182,12 +191,31 @@ Built from the window itself (`northwind.masks`), not from an external registry:
 The grid formula, `floor(lat / dlat)` and `floor(lon / dlon)`, exists in Java and Python and is
 pinned by a test on each side.
 
+### Context from outside the recording
+
+Two public layers, downloaded once from Geonorge and cut to the window by `northwind.shore`:
+
+- **Coast**: Kartverket's *Sjøkart - Dybdedata* (CC BY 4.0), the national file in EPSG:4258. Built
+  coast (`kaibrygge`, `pirkant`, `utstikker`, `molo`, dock edges, ramps, slipways) and the natural
+  coastline (`kystkontur`), simplified by about 3 m and kept as segments only in the port-grid
+  cells where a vessel reported under 1.5 kn, grown by two cells. For `w4h`: 2.4 million segments,
+  121 thousand of them built, 108 MB, in 51 s. The job indexes them by cell and measures exact
+  distances in a local flat projection.
+- **Fish farms**: the Directorate of Fisheries' *Akvakultur - lokaliteter* (NLOD), the outlines of
+  1,427 licensed sites. The register also names owners and contacts; only the outlines are read.
+
+Two more were looked at and not used. Kystverket's anchorage areas (NLOD) hold no episode of
+`w4h`: the port mask already covers the anchorages vessels used. Kartverket's harbour and maritime
+infrastructure layers would map berths and pens directly, but they are restricted to Norge digitalt
+members.
+
 ## The four-hour window
 
 `scripts/run-window.sh w4h 2026-10-13T10:00:00Z 2026-10-13T14:00:00Z 120`, on Docker Compose on one
 machine: two TaskManagers with one slot each, parallelism 2, heap state backend. The job read the
-window's 3,429,777 messages from Kafka in 14.9 s, and its rerun in 16.6 s. The whole script,
-replay to recovery test, took between 2 min 14 s and 2 min 22 s on the runs of this window that were timed. (The job times are the last run, with the rendezvous change below.)
+window's 3,429,777 messages from Kafka in 17.6 s, and its rerun in 16.5 s, with the shore step below
+(loading the coast index is part of that). The whole script, replay to recovery test, took between
+2 min 14 s and 2 min 22 s on the earlier runs of this window that were timed.
 
 | Check | Result |
 |---|---|
@@ -199,9 +227,9 @@ replay to recovery test, took between 2 min 14 s and 2 min 22 s on the runs of t
 | Pattern | Detected | Funnel |
 |---|---|---|
 | Port call | 1,903 | 226 left inside the window |
-| Rendezvous | 284 | 4 did not both hold position; 3 of those approached, 1 also parted inside the window |
+| Rendezvous | 284 | 67 did not hold position at the shore; 7 of those not at a fish farm; 4 approached; 3 parted inside the window |
 | AIS gap | 121 | 26 underway when they went quiet, 8 of those covered at both ends, 8 clear of an outage |
-| Loitering | 636 | 3 did not hold position, none of those arrived underway |
+| Loitering | 636 | 156 did not hold position at the shore; 68 of those not at a fish farm; 7 arrived underway; 3 ended inside the window |
 
 **Loitering, as first detected, was mostly vessels tied up outside the port mask.** 615 of the 636
 episodes stayed within 0.2 km of where they started; 349 are cargo ships and 187 declare themselves
@@ -239,10 +267,36 @@ together. The 4 that moved stayed 5 to 24 m apart, so alongside, while moving to
 | Dredger and cargo | 2 h 40 min | 10 m | 69.0°N 15.3°E | |
 | Cargo and cargo | 2 h 42 min, still open at the end | 5 m | 68.3°N 14.9°E | approached |
 
-What holding position cannot separate is two ships at anchor together offshore, which is where a
-ship-to-ship transfer would happen, from two boats tied up at a quay. Both hold position. Telling
-them apart needs the coastline, which this project does not use yet; until then a transfer at
-anchor is counted with the moored pairs, and the funnel and the page say so.
+**Holding position could not tell a quay from an anchorage.** Two ships at anchor together
+offshore, where a ship-to-ship transfer would happen, hold position just like two boats tied up at
+a quay. The AIS alone does not separate them: 48% of the held loitering episodes report no
+heading, so swinging at anchor cannot be seen, and of the vessels declaring themselves at anchor
+about half kept a steady heading for four hours. Where they held position does. Measured against
+the coast, the port calls (vessels known to be in port) began 11 m from it at the median and 90%
+within 66 m. The held episodes split as:
+
+| Began | Loitering held | Rendezvous held |
+|---|---|---|
+| Within 50 m of a quay | 278 | 118 |
+| Within 50 m of the natural coast | 105 | 34 |
+| 50 to 200 m | 97 | 65 |
+| Open water, beyond 200 m | 153 | 63 |
+
+Two independent signals agree with the split. Of the 27 held loitering vessels whose heading swung
+(spread of 20° or more, positions spread 25 m or more), 23 were in open water; of the 35 declaring
+"at anchor", 28 were. Of the 187 declaring "moored", 143 began within 50 m of the shore.
+
+Open water is not empty. 88 of the 153 loitering episodes and 56 of the 63 rendezvous held in open
+water began within 200 m of a licensed salmon farm: well boats and feed carriers at the pens, which
+AIS mostly lists as cargo. Without that step, 18 loitering episodes and 21 rendezvous went through
+the whole funnel, and 15 and 18 of them were at a farm.
+
+Six are left, three loitering and three rendezvous. Checked by hand against the Norwegian Offshore
+Directorate's facility register (NLOD), three lie within a kilometre of a producing oil or gas
+installation: a tanker 90 m from Njord Bravo, a tanker and a cargo vessel 460 m from the Johan
+Castberg FPSO, a vessel declaring restricted manoeuvrability 650 m from the Fulla template. The
+other three are not explained by anything this pipeline knows. The facility register is not a step
+in the funnel; with a handful of survivors, reading them is cheaper than another layer.
 
 ## What this does not claim
 
@@ -250,3 +304,5 @@ anchor is counted with the moored pairs, and the funnel and the page say so.
 - Masks come from the same window the detectors run on. That is circular by design: they describe
   where vessels in this recording stop and where reception is continuous, not where ports are.
 - No throughput or latency figure is stated anywhere without the run it came from.
+- The shore band is measured where an episode began, and the 50 to 200 m band is undecided. The
+  farm register lists licensed sites, not which ones are stocked or worked that day.
