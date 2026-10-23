@@ -38,6 +38,11 @@ def test_anonymise_drops_mmsi_rounds_positions_and_links_vessels():
     assert rows[1]["other_category"] == "fishing"
 
 
+def test_anonymise_keeps_the_shore_band_and_rounds_its_distance():
+    row = export.anonymise([event("loitering", 1, 0, heldPosition=True, shore="near", shoreM=137.4)])[0]
+    assert row["shore"] == "near" and row["shore_m"] == 140
+
+
 def test_gap_funnel_counts_each_step():
     gaps = [
         event("ais_gap", 1, 0, underway=True, coveredStart=True, coveredEnd=True, outageOverlap=False),
@@ -48,27 +53,31 @@ def test_gap_funnel_counts_each_step():
     assert [s["events"] for s in export.funnels(gaps)["ais_gap"]] == [4, 3, 2, 1]
 
 
-def test_loitering_funnel_drops_vessels_that_held_position_first():
+def test_loitering_funnel_drops_vessels_that_held_position_at_the_shore_first():
     rows = [
-        event("loitering", 1, 0, heldPosition=True, approached=True, truncated=False),
+        event("loitering", 1, 0, heldPosition=True, shore="quay", approached=True, truncated=False),
         event("loitering", 2, 0, heldPosition=False, approached=True, truncated=False),
         event("loitering", 3, 0, heldPosition=False, approached=False, truncated=False),
         event("loitering", 4, 0, heldPosition=False, approached=True, truncated=True),
         event("loitering", 5, 0),  # an older job without the flag: not counted as moving
+        event("loitering", 6, 0, heldPosition=True, shore="near", approached=True, truncated=False),
+        event("loitering", 7, 0, heldPosition=True, shore="open", approached=True, truncated=False),
+        event("loitering", 8, 0, heldPosition=True, approached=True, truncated=False),  # no shore: not offshore
     ]
     steps = export.funnels(rows)["loitering"]
-    assert [s["events"] for s in steps] == [5, 3, 2, 1]
+    assert [s["events"] for s in steps] == [8, 4, 3, 2]
     assert "hold position" in steps[1]["step"]
 
 
-def test_rendezvous_funnel_drops_pairs_that_held_position_first():
+def test_rendezvous_funnel_drops_pairs_that_held_position_at_the_shore_first():
     rows = [
-        event("rendezvous", 1, 0, other=2, heldPosition=True, approached=True, truncated=False),
+        event("rendezvous", 1, 0, other=2, heldPosition=True, shore="coast", approached=True, truncated=False),
+        event("rendezvous", 7, 0, other=8, heldPosition=True, shore="open", approached=True, truncated=True),
         event("rendezvous", 3, 0, other=4, heldPosition=False, approached=True, truncated=False),
         event("rendezvous", 5, 0, other=6, heldPosition=False, approached=False, truncated=False),
     ]
     steps = export.funnels(rows)["rendezvous"]
-    assert [s["events"] for s in steps] == [3, 2, 1, 1]
+    assert [s["events"] for s in steps] == [4, 3, 2, 1]
     assert "hold position" in steps[1]["step"]
 
 

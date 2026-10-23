@@ -24,15 +24,17 @@ ATTRIBUTION = [
     "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the "
     "Norwegian Coastal Administration.",
     "Data delivered by BarentsWatch.",
+    "Coastline © Kartverket, CC BY 4.0.",
 ]
 
-# Mirrors the constants in the Flink job (GapLogic, StopLogic, RendezvousLogic, TrackFilter).
+# Mirrors the constants in the Flink job (GapLogic, StopLogic, RendezvousLogic, TrackFilter, Shore).
 THRESHOLDS = {
     "ais_gap": {"min_silence_min": 60, "underway_kn": 1.0},
     "port_call": {"stop_kn": 0.5, "dwell_min": 30},
     "loitering": {"max_kn": 1.5, "min_duration_min": 120, "max_silence_min": 60, "hold_radius_m": 1000, "hold_share": 0.9},
     "rendezvous": {"radius_m": 500, "max_kn": 1.0, "min_duration_min": 30, "separation_min": 15},
     "approached": {"moving_kn": 1.0, "within_min": 60},
+    "shore": {"shore_m": 50, "near_m": 200},
     "track_filter": {"max_kn": 60, "min_jump_m": 2000},
 }
 
@@ -132,14 +134,20 @@ def anonymise(events: list[dict]) -> list[dict]:
         for src, dst, digits in [
             ("distanceKm", "distance_km", 1), ("impliedKnots", "implied_kn", 1),
             ("minDistanceM", "min_distance_m", 0), ("maxDriftKm", "max_drift_km", 1),
+            ("shoreM", "shore_m", -1),
         ]:
             if e.get(src) is not None:
                 row[dst] = round(e[src], digits)
-        for key in ("underway", "coveredStart", "coveredEnd", "outageOverlap", "approached", "heldPosition", "portId", "navStatusMode"):
+        for key in ("underway", "coveredStart", "coveredEnd", "outageOverlap", "approached", "heldPosition", "shore", "portId", "navStatusMode"):
             if e.get(key) is not None:
                 row[key] = e[key]
         out.append(row)
     return out
+
+
+def not_moored(e: dict) -> bool:
+    """Moving, or holding position in open water (at anchor offshore). Only explicit flags count."""
+    return e.get("heldPosition") is False or (e.get("heldPosition") is True and e.get("shore") == "open")
 
 
 def funnels(events: list[dict]) -> dict:
@@ -155,13 +163,13 @@ def funnels(events: list[dict]) -> dict:
     out["ais_gap"] = funnel(gaps, steps)
     out["rendezvous"] = funnel(by.get("rendezvous", []), [
         ("together 30 min or more", lambda e: True),
-        ("did not both hold position (not moored or at anchor together)", lambda e: e.get("heldPosition") is False),
+        ("did not hold position together at the shore (moored side by side)", not_moored),
         ("a vessel arrived underway", lambda e: e.get("approached")),
         ("ended inside the window", lambda e: not e.get("truncated")),
     ])
     out["loitering"] = funnel(by.get("loitering", []), [
         ("slow outside port 2 h or more", lambda e: True),
-        ("did not hold position (not moored or at anchor)", lambda e: e.get("heldPosition") is False),
+        ("did not hold position at the shore (moored)", not_moored),
         ("arrived underway", lambda e: e.get("approached")),
         ("ended inside the window", lambda e: not e.get("truncated")),
     ])
