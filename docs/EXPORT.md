@@ -26,7 +26,7 @@ Every file carries `schema_version` (currently `1`). A reader must refuse a vers
 | `fates.json` | Message totals per fate, per receiving network, and invalid messages per reason |
 | `lateness.json` | Lateness (arrival minus event time) per network: quantiles and a log-binned histogram, from the window's profile and the recording |
 | `traffic.json` | Position reports received per coverage cell (0.1° × 0.2°) per hour of the window, from the recording, for the map |
-| `events.json` | Every detection, with the funnel fields (`underway`, `coveredStart`, `coveredEnd`, `outageOverlap`, `approached`, `truncated`) |
+| `events.json` | Every detection, with the funnel fields (`underway`, `coveredStart`, `coveredEnd`, `outageOverlap`, `approached`, `heldPosition`, `shore`, `atFarm`, `truncated`) and, for loitering and rendezvous, `shore_m`: the distance to the nearest coast, rounded to 10 m |
 | `funnels.json` | Per pattern, how many detections pass each successive filter |
 
 ## What is not exported
@@ -42,8 +42,11 @@ Every file carries `schema_version` (currently `1`). A reader must refuse a vers
 
 ## Attribution
 
-`manifest.json` carries both lines and the page must show them:
+`manifest.json` carries these lines and the page must show them:
 
 - Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the
   Norwegian Coastal Administration.
 - Data delivered by BarentsWatch.
+- Coastline © Kartverket, CC BY 4.0.
+- Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the
+  Directorate of Fisheries.
