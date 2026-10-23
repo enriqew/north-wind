@@ -25,6 +25,8 @@ ATTRIBUTION = [
     "Norwegian Coastal Administration.",
     "Data delivered by BarentsWatch.",
     "Coastline © Kartverket, CC BY 4.0.",
+    "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the "
+    "Directorate of Fisheries.",
 ]
 
 # Mirrors the constants in the Flink job (GapLogic, StopLogic, RendezvousLogic, TrackFilter, Shore).
@@ -35,6 +37,7 @@ THRESHOLDS = {
     "rendezvous": {"radius_m": 500, "max_kn": 1.0, "min_duration_min": 30, "separation_min": 15},
     "approached": {"moving_kn": 1.0, "within_min": 60},
     "shore": {"shore_m": 50, "near_m": 200},
+    "fish_farm": {"within_m": 200},
     "track_filter": {"max_kn": 60, "min_jump_m": 2000},
 }
 
@@ -138,7 +141,7 @@ def anonymise(events: list[dict]) -> list[dict]:
         ]:
             if e.get(src) is not None:
                 row[dst] = round(e[src], digits)
-        for key in ("underway", "coveredStart", "coveredEnd", "outageOverlap", "approached", "heldPosition", "shore", "portId", "navStatusMode"):
+        for key in ("underway", "coveredStart", "coveredEnd", "outageOverlap", "approached", "heldPosition", "shore", "atFarm", "portId", "navStatusMode"):
             if e.get(key) is not None:
                 row[key] = e[key]
         out.append(row)
@@ -164,12 +167,14 @@ def funnels(events: list[dict]) -> dict:
     out["rendezvous"] = funnel(by.get("rendezvous", []), [
         ("together 30 min or more", lambda e: True),
         ("did not hold position together at the shore (moored side by side)", not_moored),
+        ("not at a fish farm", lambda e: e.get("atFarm") is False),
         ("a vessel arrived underway", lambda e: e.get("approached")),
         ("ended inside the window", lambda e: not e.get("truncated")),
     ])
     out["loitering"] = funnel(by.get("loitering", []), [
         ("slow outside port 2 h or more", lambda e: True),
         ("did not hold position at the shore (moored)", not_moored),
+        ("not at a fish farm", lambda e: e.get("atFarm") is False),
         ("arrived underway", lambda e: e.get("approached")),
         ("ended inside the window", lambda e: not e.get("truncated")),
     ])

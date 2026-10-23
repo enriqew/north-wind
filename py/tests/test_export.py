@@ -55,30 +55,33 @@ def test_gap_funnel_counts_each_step():
 
 def test_loitering_funnel_drops_vessels_that_held_position_at_the_shore_first():
     rows = [
-        event("loitering", 1, 0, heldPosition=True, shore="quay", approached=True, truncated=False),
-        event("loitering", 2, 0, heldPosition=False, approached=True, truncated=False),
-        event("loitering", 3, 0, heldPosition=False, approached=False, truncated=False),
-        event("loitering", 4, 0, heldPosition=False, approached=True, truncated=True),
-        event("loitering", 5, 0),  # an older job without the flag: not counted as moving
-        event("loitering", 6, 0, heldPosition=True, shore="near", approached=True, truncated=False),
-        event("loitering", 7, 0, heldPosition=True, shore="open", approached=True, truncated=False),
+        event("loitering", 1, 0, heldPosition=True, shore="quay", atFarm=False, approached=True, truncated=False),
+        event("loitering", 2, 0, heldPosition=False, atFarm=False, approached=True, truncated=False),
+        event("loitering", 3, 0, heldPosition=False, atFarm=False, approached=False, truncated=False),
+        event("loitering", 4, 0, heldPosition=False, atFarm=False, approached=True, truncated=True),
+        event("loitering", 5, 0),  # an older job without the flags: not counted as moving
+        event("loitering", 6, 0, heldPosition=True, shore="near", atFarm=False, approached=True, truncated=False),
+        event("loitering", 7, 0, heldPosition=True, shore="open", atFarm=False, approached=True, truncated=False),
         event("loitering", 8, 0, heldPosition=True, approached=True, truncated=False),  # no shore: not offshore
+        event("loitering", 9, 0, heldPosition=True, shore="open", atFarm=True, approached=True, truncated=False),
+        event("loitering", 10, 0, heldPosition=False, approached=True, truncated=False),  # no farm flag
     ]
     steps = export.funnels(rows)["loitering"]
-    assert [s["events"] for s in steps] == [8, 4, 3, 2]
-    assert "hold position" in steps[1]["step"]
+    assert [s["events"] for s in steps] == [10, 6, 4, 3, 2]
+    assert "hold position" in steps[1]["step"] and "fish farm" in steps[2]["step"]
 
 
 def test_rendezvous_funnel_drops_pairs_that_held_position_at_the_shore_first():
     rows = [
-        event("rendezvous", 1, 0, other=2, heldPosition=True, shore="coast", approached=True, truncated=False),
-        event("rendezvous", 7, 0, other=8, heldPosition=True, shore="open", approached=True, truncated=True),
-        event("rendezvous", 3, 0, other=4, heldPosition=False, approached=True, truncated=False),
-        event("rendezvous", 5, 0, other=6, heldPosition=False, approached=False, truncated=False),
+        event("rendezvous", 1, 0, other=2, heldPosition=True, shore="coast", atFarm=False, approached=True, truncated=False),
+        event("rendezvous", 7, 0, other=8, heldPosition=True, shore="open", atFarm=False, approached=True, truncated=True),
+        event("rendezvous", 3, 0, other=4, heldPosition=False, atFarm=False, approached=True, truncated=False),
+        event("rendezvous", 5, 0, other=6, heldPosition=False, atFarm=False, approached=False, truncated=False),
+        event("rendezvous", 9, 0, other=10, heldPosition=False, atFarm=True, approached=True, truncated=False),
     ]
     steps = export.funnels(rows)["rendezvous"]
-    assert [s["events"] for s in steps] == [4, 3, 2, 1]
-    assert "hold position" in steps[1]["step"]
+    assert [s["events"] for s in steps] == [5, 4, 3, 2, 1]
+    assert "hold position" in steps[1]["step"] and "fish farm" in steps[2]["step"]
 
 
 @pytest.fixture
