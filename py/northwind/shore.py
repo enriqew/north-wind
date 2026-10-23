@@ -1,4 +1,5 @@
-"""The coast near where vessels in a window sat still, for telling moored from anchored.
+"""The coast near where vessels in a window sat still, and the fish farms, for telling moored from
+anchored and either from loitering.
 
 A vessel that holds position may be tied to a quay or at anchor, and the AIS alone does not say
 which: about half the vessels that hold position send no heading, so swinging at anchor cannot be
@@ -17,6 +18,12 @@ vessel in the window reported under SLOW_KNOTS, grown by GROW cells. The job loo
 around a position, so every segment within a cell's width of a slow position is there. Lines are
 simplified first by SIMPLIFY_DEG, a few metres, far below the distances the job tells apart.
 
+farms.csv holds the outline of every licensed aquaculture site from the Directorate of Fisheries'
+"Akvakultur - lokaliteter" (NLOD), downloaded once from Geonorge as the national FGDB in EPSG:25833,
+one row per vertex. A well boat or feed carrier holding position at a salmon farm, alone or beside
+another, is at work, and away from the shore it otherwise looks like a ship at anchor. Only the
+outlines are read: the register also names owners and contact people, and none of that is kept.
+
     python -m northwind.shore --name w4h
 """
 
@@ -29,6 +36,7 @@ import logging
 import numpy as np
 import pyogrio
 import shapely
+from pyproj import Transformer
 
 from northwind.masks import PORT_DLAT, PORT_DLON
 from northwind.recording import DATA, Manifest, connect, raw_glob
@@ -39,6 +47,7 @@ COAST = DATA / "external" / "dybdedata" / "Basisdata_0000_Norge_4258_Dybdedata_F
 BUILT = ["kaibrygge", "pirkant", "utstikker", "molo", "flytedokkkant", "spuntvegger", "torrdokkkant",
          "rampe", "slipp"]
 NATURAL = ["kystkontur"]
+FARMS = DATA / "external" / "akvakultur" / "KystOgFiskeri_0000_Norge_25833_AkvakulturLokaliteter_FGDB.gdb"
 SLOW_KNOTS = 1.5  # loitering's speed limit; rendezvous uses 1.0
 GROW = 2
 SIMPLIFY_DEG = 0.00003  # about 3 m north-south, less east-west
@@ -91,6 +100,22 @@ def keep(seg: np.ndarray, cells: set[tuple[int, int]]) -> np.ndarray:
     return seg[mask]
 
 
+def write_farms(path) -> int:
+    """Every licensed site's outline in EPSG:4258, vertices in order, one site after another."""
+    wkb = pyogrio.raw.read(str(FARMS), layer="akvakulturflate", read_geometry=True, columns=[])[2]
+    rings = [shapely.get_exterior_ring(p) for p in shapely.get_parts(shapely.from_wkb(wkb))]
+    to_deg = Transformer.from_crs(25833, 4258, always_xy=True)
+    with path.open("w", newline="") as f:
+        w = csv.writer(f, lineterminator="\n")
+        w.writerow(["farm", "lat", "lon"])
+        for i, ring in enumerate(rings):
+            xy = shapely.get_coordinates(ring)
+            lon, lat = to_deg.transform(xy[:, 0], xy[:, 1])
+            for a, b in zip(lat, lon):
+                w.writerow([i, f"{a:.7f}", f"{b:.7f}"])
+    return len(rings)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ap = argparse.ArgumentParser()
@@ -116,6 +141,7 @@ def main() -> None:
                     w.writerow([kind] + [f"{v:.7f}" for v in s])
                 counts[layer] = len(seg)
     log.info("%d slow cells (grown), segments: %s", len(cells), counts)
+    log.info("%d fish farms", write_farms(out.with_name("farms.csv")))
 
 
 if __name__ == "__main__":
