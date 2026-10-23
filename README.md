@@ -15,8 +15,8 @@ stays correct anyway:
   processing-time timer, everything that judges lateness runs at parallelism 1, and every keyed
   operator orders its input by event time before acting. Lateness is a property of the recording,
   not of how fast the machine replays it.
-- **Lateness is measured, not assumed.** Satellite messages arrive about 40 minutes after they were
-  sent. Whether they count is a choice of watermark bound, and the run records which.
+- **Lateness is measured, not assumed.** Satellite messages arrive an hour and a half after they
+  were sent, at the median. Whether they count is a choice of watermark bound, and the run records which.
 
 ## Data
 
@@ -26,6 +26,14 @@ BarentsWatch Live AIS API. The open tier excludes fishing vessels under 15 m and
 
 > Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the
 > Norwegian Coastal Administration. Data delivered by BarentsWatch.
+
+Two static layers tell a vessel moored at a quay from one at anchor, and either from a boat at work
+at a salmon farm. Both are downloaded once from Geonorge into `$NW_DATA_DIR/external/`:
+
+- `dybdedata/`: Kartverket, *Sjøkart - Dybdedata*, the national FGDB in EPSG:4258.
+  Coastline © Kartverket, CC BY 4.0.
+- `akvakultur/`: the Directorate of Fisheries, *Akvakultur - lokaliteter*, the national FGDB in
+  EPSG:25833. Contains data under the NLOD distributed by the Directorate of Fisheries.
 
 The recording stays local. What leaves this repository is aggregate output: detections without
 vessel names or MMSI numbers.
@@ -51,6 +59,7 @@ docker compose --profile flink up -d jobmanager taskmanager-1 taskmanager-2
 docker compose run --rm --no-deps tools python -m northwind.replay --name w1 \
     --start 2026-10-13T10:00:00Z --end 2026-10-13T16:00:00Z
 docker compose run --rm --no-deps tools python -m northwind.masks --name w1
+docker compose run --rm --no-deps tools python -m northwind.shore --name w1
 docker compose run --rm --no-deps tools python -m northwind.profile --name w1
 
 # Run the job over it and check the run
@@ -70,4 +79,4 @@ See [docs/DESIGN.md](docs/DESIGN.md) for how it works and why.
 
 ## License
 
-MIT for the code. The data is NLOD, see above.
+MIT for the code. The AIS and fish farm data are NLOD, the coastline CC BY 4.0, see above.
