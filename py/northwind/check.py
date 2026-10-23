@@ -86,6 +86,7 @@ def detections(events: list[dict]) -> dict:
             summary["held_position"] = sum(1 for r in rows if r.get("heldPosition"))
             summary["held_by_shore"] = dict(sorted(Counter(r.get("shore") for r in rows if r.get("heldPosition")).items(),
                                                    key=lambda kv: str(kv[0])))
+            summary["at_fish_farm"] = sum(1 for r in rows if r.get("atFarm"))
         if pattern in ("loitering", "rendezvous"):
             summary["approached"] = sum(1 for r in rows if r.get("approached"))
             summary["approached_and_closed"] = sum(1 for r in rows if r.get("approached") and not r.get("truncated"))
