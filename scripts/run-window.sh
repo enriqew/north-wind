@@ -5,6 +5,7 @@
 #
 #   replay   the window into replay.<window>, with its manifest
 #   masks    port areas, coverage and outages from the window
+#   shore    the coast near where vessels sat still (needs the Dybdedata download, see shore.py)
 #   profile  rate, mix, duplicates and lateness
 #   run      the job, then the conservation check
 #   rerun    the job again, compared with the first run (determinism)
@@ -29,6 +30,8 @@ echo "== replay $window [$start, $end)"
 tools northwind.replay --name "$window" --start "$start" --end "$end"
 echo "== masks"
 tools northwind.masks --name "$window"
+echo "== shore"
+tools northwind.shore --name "$window"
 echo "== profile"
 tools northwind.profile --name "$window" > /dev/null
 echo "== run $run"
