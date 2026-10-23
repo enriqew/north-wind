@@ -55,6 +55,8 @@ public class PatternEvent {
     public String shore;
     /** Metres from where the episode began to the nearest coast, built or natural; null beyond a cell. */
     public Double shoreM;
+    /** Loitering and rendezvous: began within 200 m of a licensed fish farm (see {@code Farms}). */
+    public Boolean atFarm;
 
     // rendezvous
     public Long otherMmsi;

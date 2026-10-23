@@ -49,7 +49,7 @@ import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.
  *   -> keyBy mmsi: dedup, static, order, track   duplicate/static/implied_speed -> audit
  *   -> keyBy mmsi: gaps, port calls, loitering   -> events
  *   -> keyBy cell: pairs within 500 m            -> keyBy pair: rendezvous episodes -> events
- * events -> distance to the shore (loitering, rendezvous)
+ * events -> distance to the shore, and fish farms (loitering, rendezvous)
  * audit -> keyBy category: totals at end of input -> audit
  * </pre>
  *
@@ -135,7 +135,7 @@ public final class NorthWindJob {
                 .union(onTime.getSideOutput(Tags.REJECTED), clean.getSideOutput(Tags.REJECTED));
 
         DataStream<String> eventsJson = vesselEvents.union(rendezvous)
-                .map(new ShoreTagger(masks)).name("distance to the shore").setParallelism(1)
+                .map(new ShoreTagger(masks)).name("shore and fish farms").setParallelism(1)
                 .map(new ToJson<>()).name("events json");
         eventsJson.sinkTo(jsonl(out, "events")).name("events");
         if (eventsTopic != null) {
