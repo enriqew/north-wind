@@ -27,7 +27,9 @@ last=$(find "$data/recordings/live/raw" -name 'part-*.parquet' | sed -E 's/.*par
 echo "ais.raw ends at offset $((end - 1)); the recording ends at $last"
 [ "$last" -eq "$((end - 1))" ] || { echo "the recording is short of the topic: not stopping Kafka"; exit 1; }
 
-docker compose logs --no-color > "$out/compose.log" 2>&1
+# Every profile, or Flink's logs are left out (the dry run lost them this way).
+docker compose --profile flink --profile tools logs --no-color > "$out/compose.log" 2>&1
+docker logs north-wind-sampler > "$out/sampler.log" 2>&1 || true
 aws s3 sync "$data/recordings/live" "s3://$NW_BUCKET/recordings/live" --only-show-errors
 aws s3 sync "$out" "s3://$NW_BUCKET/runs/$name-live" --only-show-errors
 docker compose --profile flink stop
