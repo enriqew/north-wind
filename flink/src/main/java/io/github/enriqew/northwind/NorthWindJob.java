@@ -3,6 +3,7 @@ package io.github.enriqew.northwind;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
+import java.time.Instant;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.github.enriqew.northwind.model.AisRecord;
 import io.github.enriqew.northwind.model.Disposition;
@@ -70,9 +71,20 @@ public final class NorthWindJob {
         String topic = params.get("topic", "replay." + window);
         String masks = params.get("masks", dataDir + "/windows/" + window + "/masks");
         String out = params.getRequired("out");
-        JsonNode manifest = new ObjectMapper().readTree(new File(dataDir + "/windows/" + window + "/manifest.json"));
-        long windowStartMs = manifest.get("start_ms").asLong();
-        long windowEndMs = manifest.get("end_ms").asLong();
+        // Live: read the ingest's topic as it grows, with the window given up front, since there is no
+        // manifest until the recording exists. Stop it with `flink stop --drain`, which ends it the way
+        // a bounded replay ends, so its output can be compared with the replay of the same window.
+        boolean live = params.has("live");
+        long windowStartMs;
+        long windowEndMs;
+        if (params.has("start") && params.has("end")) {
+            windowStartMs = Instant.parse(params.get("start")).toEpochMilli();
+            windowEndMs = Instant.parse(params.get("end")).toEpochMilli();
+        } else {
+            JsonNode manifest = new ObjectMapper().readTree(new File(dataDir + "/windows/" + window + "/manifest.json"));
+            windowStartMs = manifest.get("start_ms").asLong();
+            windowEndMs = manifest.get("end_ms").asLong();
+        }
         long boundMs = params.getLong("lateness-bound-s", 120) * 1000;
         long gapMs = params.getLong("gap-threshold-s", 3600) * 1000;
         long checkpointMs = params.getLong("checkpoint-interval-s", 30) * 1000;
@@ -83,14 +95,16 @@ public final class NorthWindJob {
         env.enableCheckpointing(checkpointMs);
         env.getConfig().setGlobalJobParameters(params);
 
-        KafkaSource<RawMessage> source = KafkaSource.<RawMessage>builder()
+        var sourceBuilder = KafkaSource.<RawMessage>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("north-wind")
                 .setStartingOffsets(OffsetsInitializer.earliest())
-                .setBounded(OffsetsInitializer.latest())
-                .setDeserializer(new RawMessageDeserializer())
-                .build();
+                .setDeserializer(new RawMessageDeserializer());
+        if (!live) {
+            sourceBuilder.setBounded(OffsetsInitializer.latest());
+        }
+        KafkaSource<RawMessage> source = sourceBuilder.build();
 
         SingleOutputStreamOperator<AisRecord> decoded = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "replay")
