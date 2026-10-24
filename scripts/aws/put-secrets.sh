@@ -5,6 +5,8 @@
 #
 #   scripts/aws/put-secrets.sh
 set -euo pipefail
+# Git Bash would otherwise rewrite the parameter names (/north-wind/...) as Windows paths.
+export MSYS_NO_PATHCONV=1
 
 cd "$(dirname "$0")/../.."
 tmp=$(mktemp)

@@ -22,7 +22,9 @@ echo "from_ms,to_ms" > "$live/outages.csv"
 [ -f "$live/shore.csv" ] && [ -f "$live/farms.csv" ] || \
     docker compose run --rm --no-deps -T tools python -m northwind.shore --all --out /data/live-masks
 
+# A mixed-style path (C:/...) works for git, tar and the AWS CLI alike on Windows, and is a no-op elsewhere.
 work=$(mktemp -d)
+work=$(cygpath -m "$work" 2>/dev/null || echo "$work")
 git archive --format=tar --output="$work/north-wind.tar" HEAD
 tar --force-local -rf "$work/north-wind.tar" flink/target/north-wind.jar
 tar --force-local -rf "$work/north-wind.tar" -C "$data" live-masks
