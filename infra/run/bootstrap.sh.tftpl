@@ -29,8 +29,8 @@ printf 'NW_BUCKET=%s\nAWS_DEFAULT_REGION=%s\n' "${bucket}" "${region}" > /etc/no
 
 cd /opt/north-wind
 docker compose build ingest
-docker compose pull kafka
-docker compose --profile flink pull
+# Pull only the registry images: the Python one is built here, and pulling it fails the boot.
+docker compose --profile flink pull --ignore-buildable
 
 systemd-run --unit nw-start --on-calendar='${start_at}' \
   /bin/bash /opt/north-wind/scripts/aws/live-start.sh ${name} ${window_start} ${window_end}
