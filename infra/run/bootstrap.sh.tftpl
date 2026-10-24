@@ -1,0 +1,41 @@
+#!/bin/bash
+# Runs once at first boot (cloud-init). Installs Docker, unpacks the code package, writes the
+# credentials from SSM into .env, pulls the images, and sets three timers: start, stop, power off.
+set -euxo pipefail
+exec > /var/log/north-wind-bootstrap.log 2>&1
+
+dnf install -y docker
+systemctl enable --now docker
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+  "https://github.com/docker/compose/releases/download/v${compose_version}/docker-compose-linux-aarch64"
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+mkdir -p /opt/north-wind /data
+aws s3 cp "s3://${bucket}/package/north-wind.tar.gz" /tmp/north-wind.tar.gz --region ${region}
+tar -xzf /tmp/north-wind.tar.gz -C /opt/north-wind
+mv /opt/north-wind/live-masks /data/live-masks
+
+# The secret goes from SSM straight into .env (0600), never into user data, logs or the AMI.
+set +x
+id=$(aws ssm get-parameter --region ${region} --name /north-wind/bw_client_id --with-decryption --query Parameter.Value --output text)
+secret=$(aws ssm get-parameter --region ${region} --name /north-wind/bw_client_secret --with-decryption --query Parameter.Value --output text)
+umask 077
+printf 'BW_CLIENT_ID=%s\nBW_CLIENT_SECRET=%s\nNW_DATA_DIR=/data\n' "$id" "$secret" > /opt/north-wind/.env
+unset id secret
+umask 022
+set -x
+printf 'NW_BUCKET=%s\nAWS_DEFAULT_REGION=%s\n' "${bucket}" "${region}" > /etc/north-wind.env
+
+cd /opt/north-wind
+docker compose build ingest
+docker compose pull kafka
+docker compose --profile flink pull
+
+systemd-run --unit nw-start --on-calendar='${start_at}' \
+  /bin/bash /opt/north-wind/scripts/aws/live-start.sh ${name} ${window_start} ${window_end}
+systemd-run --unit nw-stop --on-calendar='${stop_at}' --property=EnvironmentFile=/etc/north-wind.env \
+  /bin/bash /opt/north-wind/scripts/aws/live-stop.sh ${name}
+systemd-run --unit nw-poweroff --on-calendar='${poweroff_at}' /usr/bin/systemctl poweroff
+
+echo "bootstrap done at $(date -u +%FT%TZ)"
