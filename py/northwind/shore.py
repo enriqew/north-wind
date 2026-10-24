@@ -24,7 +24,12 @@ one row per vertex. A well boat or feed carrier holding position at a salmon far
 another, is at work, and away from the shore it otherwise looks like a ship at anchor. Only the
 outlines are read: the register also names owners and contact people, and none of that is kept.
 
+A live run has no window to cut the coast to yet, so `--all` writes the whole coast instead, into
+any directory: built coast at the same few metres, the natural coastline simplified by
+SIMPLIFY_ALL_DEG (about 10 m), which keeps the file near the size of a window's.
+
     python -m northwind.shore --name w4h
+    python -m northwind.shore --all --out /data/live-masks
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+from pathlib import Path
 
 import numpy as np
 import pyogrio
@@ -51,6 +57,7 @@ FARMS = DATA / "external" / "akvakultur" / "KystOgFiskeri_0000_Norge_25833_Akvak
 SLOW_KNOTS = 1.5  # loitering's speed limit; rendezvous uses 1.0
 GROW = 2
 SIMPLIFY_DEG = 0.00003  # about 3 m north-south, less east-west
+SIMPLIFY_ALL_DEG = 0.0001  # about 11 m north-south, for the natural coast under --all
 
 
 def slow_cells(name: str) -> set[tuple[int, int]]:
@@ -74,10 +81,10 @@ def grow(cells: set[tuple[int, int]], n: int) -> set[tuple[int, int]]:
     return {(r + dr, c + dc) for r, c in cells for dr in range(-n, n + 1) for dc in range(-n, n + 1)}
 
 
-def segments(layer: str, bbox: tuple[float, float, float, float]) -> np.ndarray:
-    """Every segment of a line layer inside the box, as rows of lat1, lon1, lat2, lon2."""
+def segments(layer: str, bbox: tuple[float, float, float, float] | None, tolerance: float = SIMPLIFY_DEG) -> np.ndarray:
+    """Every segment of a line layer inside the box (or all of it), as rows of lat1, lon1, lat2, lon2."""
     wkb = pyogrio.raw.read(str(COAST), layer=layer, read_geometry=True, columns=[], bbox=bbox)[2]
-    lines = shapely.get_parts(shapely.simplify(shapely.from_wkb(wkb), SIMPLIFY_DEG))
+    lines = shapely.get_parts(shapely.simplify(shapely.from_wkb(wkb), tolerance))
     out = []
     for line in lines:
         xy = shapely.get_coordinates(line)
@@ -119,28 +126,39 @@ def write_farms(path) -> int:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--name", required=True)
+    ap.add_argument("--name", help="the window whose slow cells the coast is cut to")
+    ap.add_argument("--all", action="store_true", help="the whole coast, for a live run")
+    ap.add_argument("--out", help="the masks directory to write to (default: the window's)")
     args = ap.parse_args()
+    if args.all == bool(args.name):
+        ap.error("give either --name or --all")
 
-    cells = grow(slow_cells(args.name), GROW)
-    rows = [r for r, _ in cells]
-    cols = [c for _, c in cells]
-    bbox = (min(cols) * PORT_DLON, min(rows) * PORT_DLAT, (max(cols) + 1) * PORT_DLON, (max(rows) + 1) * PORT_DLAT)
-
-    out = DATA / "windows" / args.name / "masks" / "shore.csv"
+    if args.all:
+        cells, bbox = None, None
+        out = Path(args.out) / "shore.csv"
+    else:
+        cells = grow(slow_cells(args.name), GROW)
+        rows = [r for r, _ in cells]
+        cols = [c for _, c in cells]
+        bbox = (min(cols) * PORT_DLON, min(rows) * PORT_DLAT, (max(cols) + 1) * PORT_DLON, (max(rows) + 1) * PORT_DLAT)
+        out = Path(args.out) / "shore.csv" if args.out else DATA / "windows" / args.name / "masks" / "shore.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
     counts = {}
     with out.open("w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         w.writerow(["kind", "lat1", "lon1", "lat2", "lon2"])
         for kind, layers in (("b", BUILT), ("n", NATURAL)):
             for layer in layers:
-                seg = keep(segments(layer, bbox), cells)
+                tolerance = SIMPLIFY_ALL_DEG if args.all and kind == "n" else SIMPLIFY_DEG
+                seg = segments(layer, bbox, tolerance)
+                if cells is not None:
+                    seg = keep(seg, cells)
                 # Sorted, so the file is the same whatever order the driver returns features in.
                 seg = seg[np.lexsort(seg.T[::-1])]
                 for s in seg:
                     w.writerow([kind] + [f"{v:.7f}" for v in s])
                 counts[layer] = len(seg)
-    log.info("%d slow cells (grown), segments: %s", len(cells), counts)
+    log.info("%s, segments: %s", "whole coast" if cells is None else f"{len(cells)} slow cells (grown)", counts)
     log.info("%d fish farms", write_farms(out.with_name("farms.csv")))
 
 
