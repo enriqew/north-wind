@@ -106,9 +106,19 @@ public final class NorthWindJob {
         }
         KafkaSource<RawMessage> source = sourceBuilder.build();
 
-        SingleOutputStreamOperator<AisRecord> decoded = env
+        DataStream<RawMessage> input = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "replay")
-                .setParallelism(1)
+                .setParallelism(1);
+        if (live) {
+            // A window is an interval of arrival time. A replay topic holds only that interval; the
+            // live topic holds everything the ingest received, so the job cuts the window itself and
+            // sees exactly the messages the replay of the same window will.
+            long from = windowStartMs;
+            long to = windowEndMs;
+            input = input.filter(m -> m.arrivalMs >= from && m.arrivalMs < to)
+                    .name("arrival window").setParallelism(1);
+        }
+        SingleOutputStreamOperator<AisRecord> decoded = input
                 .process(new DecodeFunction(windowStartMs, windowEndMs))
                 .name("decode")
                 .setParallelism(1);
