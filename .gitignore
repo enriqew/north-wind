@@ -21,3 +21,9 @@ __pycache__/
 
 # Flink build output and test reports
 flink/target/
+
+# Terraform state and plugins (the lock file is committed)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
