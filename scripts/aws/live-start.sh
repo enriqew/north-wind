@@ -19,6 +19,13 @@ docker compose --profile flink up -d jobmanager taskmanager-1 taskmanager-2
 slots() { curl -s localhost:8081/taskmanagers | grep -o '"slotsNumber"' | wc -l; }
 until [ "$(slots)" -ge 2 ]; do sleep 2; done
 
+# Flink runs as uid 9999. On Linux a fresh checkpoint volume and the data directory belong to root,
+# and the job fails creating its first checkpoint (Docker Desktop hides this).
+data=$(sed -n 's/^NW_DATA_DIR=//p' .env)
+docker compose exec -T -u root jobmanager chown -R flink:flink /checkpoints
+mkdir -p "$data/runs/$name-live"
+chown -R 9999:9999 "$data/runs" 2>/dev/null || true
+
 docker compose exec -T jobmanager flink run -d /opt/flink/usrlib/north-wind.jar \
     --live --window "$name" --topic ais.raw --start "$start" --end "$end" \
     --masks /data/live-masks --lateness-bound-s 120 --out "/data/runs/$name-live"
