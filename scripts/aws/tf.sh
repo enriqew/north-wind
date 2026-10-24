@@ -11,7 +11,8 @@ export MSYS_NO_PATHCONV=1
 dir=$1
 shift
 cd "$(dirname "$0")/../.."
-creds=$(aws configure export-credentials --format env-no-export)
+# The Windows CLI ends its lines with \r, which would end up inside the session token.
+creds=$(aws configure export-credentials --format env-no-export | tr -d '\r')
 env_args=()
 while IFS= read -r line; do
     [ -n "$line" ] && env_args+=(-e "$line")
