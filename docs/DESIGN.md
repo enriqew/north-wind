@@ -298,11 +298,38 @@ Castberg FPSO, a vessel declaring restricted manoeuvrability 650 m from the Full
 other three are not explained by anything this pipeline knows. The facility register is not a step
 in the funnel; with a handful of survivors, reading them is cheaper than another layer.
 
+## A day live on AWS
+
+Window `d1`: Wednesday 2026-10-28, 00:00 to 24:00 UTC. The same Compose stack ran on one EC2
+`t4g.large` (Graviton, ARM) in `eu-north-1`, recording from 23:00 the day before to 01:00 the day
+after. The job ran in live mode on `ais.raw` and kept what arrived inside the window. The machine
+is in `infra/run`, and systemd timers start and stop the run (`scripts/aws/`). Metrics were read
+from Flink's REST API every five minutes, 312 samples:
+
+| Measured | Over the 26 hours |
+|---|---|
+| Read from `ais.raw` | 20,866,853 messages, 19,535,335 of them inside the window |
+| Behind the feed | 0 records at every sample; arrival to emission at the source 112 ms median, 202 ms p95, 207 ms max |
+| State | 22.6 MB median, 24.9 MB max |
+| Checkpoints | 3,110 completed, 264 ms median, 580 ms max. Two failed: one triggered before the tasks were running, one declined while the job drained |
+| Feed | 26 planned reconnections to refresh the token, and one dropped stream at 17:56:05, back in 1.2 s |
+
+Replayed afterwards on x86 from the recording, with the same masks and lateness bound, the window
+gave the same 145,436 rejected messages and the same totals, byte for byte, and the same 9,037
+events. Byte for byte, 39 of those events were not the same. Each had one distance
+(`maxDriftKm`, `minDistanceM`, `distanceKm` or `impliedKnots`) that differed in its last digit,
+0.38111385966453193 against 0.3811138596645318, a relative difference of at most 3.6e-16. Java
+allows `Math.sin`, `cos` and `asin` to be off by an ulp, and the JIT uses each CPU's own routines:
+the live run was on ARM, the replay on x86. The dry run had not shown it because its half hour had
+no events. Distances now go through `StrictMath`, which gives the same bits on every platform.
+
 ## What this does not claim
 
 - An AIS gap is a fact about reception. It says nothing about why.
 - Masks come from the same window the detectors run on. That is circular by design: they describe
   where vessels in this recording stop and where reception is continuous, not where ports are.
 - No throughput or latency figure is stated anywhere without the run it came from.
+- The live run of `d1` used `Math`, so its events match the replay's in number, vessels and times but
+  not byte for byte; that claim holds only for runs made with `StrictMath`.
 - The shore band is measured where an episode began, and the 50 to 200 m band is undecided. The
   farm register lists licensed sites, not which ones are stocked or worked that day.
