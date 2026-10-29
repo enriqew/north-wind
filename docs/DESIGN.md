@@ -322,6 +322,9 @@ events. Byte for byte, 39 of those events were not the same. Each had one distan
 allows `Math.sin`, `cos` and `asin` to be off by an ulp, and the JIT uses each CPU's own routines:
 the live run was on ARM, the replay on x86. The dry run had not shown it because its half hour had
 no events. Distances now go through `StrictMath`, which gives the same bits on every platform.
+Replayed with it on x86 and on emulated arm64 (QEMU under Docker), the window gave identical
+events, rejected messages and totals, byte for byte. On x86, `Math` and `StrictMath` differ in 40
+of the 9,037 events.
 
 ## What this does not claim
 
