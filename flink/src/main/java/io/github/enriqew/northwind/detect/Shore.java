@@ -119,7 +119,7 @@ public final class Shore implements Serializable {
         int row = Geo.row(lat, Masks.PORT_DLAT);
         int col = Geo.col(lon, Masks.PORT_DLON);
         // Local flat projection around the position: within a kilometre it is off by far less than a metre.
-        double kx = M_PER_DEG * Math.cos(Math.toRadians(lat));
+        double kx = M_PER_DEG * StrictMath.cos(Math.toRadians(lat));
         double best = Double.POSITIVE_INFINITY;
         for (int r = row - 1; r <= row + 1; r++) {
             for (int c = col - 1; c <= col + 1; c++) {
@@ -143,6 +143,6 @@ public final class Shore implements Serializable {
         double dy = y2 - y1;
         double len2 = dx * dx + dy * dy;
         double t = len2 == 0 ? 0 : Math.max(0, Math.min(1, -(x1 * dx + y1 * dy) / len2));
-        return Math.hypot(x1 + t * dx, y1 + t * dy);
+        return StrictMath.hypot(x1 + t * dx, y1 + t * dy);
     }
 }

@@ -86,7 +86,7 @@ public final class Farms implements Serializable {
     public double distanceM(double lat, double lon) {
         int row = Geo.row(lat, Masks.PORT_DLAT);
         int col = Geo.col(lon, Masks.PORT_DLON);
-        double kx = M_PER_DEG * Math.cos(Math.toRadians(lat));
+        double kx = M_PER_DEG * StrictMath.cos(Math.toRadians(lat));
         double best = Double.POSITIVE_INFINITY;
         for (int r = row - 1; r <= row + 1; r++) {
             for (int c = col - 1; c <= col + 1; c++) {

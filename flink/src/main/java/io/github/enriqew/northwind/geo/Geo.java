@@ -1,6 +1,11 @@
 package io.github.enriqew.northwind.geo;
 
-/** Distances and grid cells. The grid formula is mirrored in the Python mask builder and must match it. */
+/**
+ * Distances and grid cells. The grid formula is mirrored in the Python mask builder and must match it.
+ *
+ * <p>Trigonometry goes through StrictMath: Math.sin and friends may differ by an ulp between CPUs, and
+ * the live run on ARM and its replay on x86 differed in the last digit of 39 distances of 9,037 events.
+ */
 public final class Geo {
     private static final double EARTH_RADIUS_M = 6_371_008.8;
     public static final double MS_TO_KNOTS = 1.943844;
@@ -12,9 +17,9 @@ public final class Geo {
         double p2 = Math.toRadians(lat2);
         double dp = p2 - p1;
         double dl = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dp / 2) * Math.sin(dp / 2)
-                + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
-        return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1.0, Math.sqrt(a)));
+        double a = StrictMath.sin(dp / 2) * StrictMath.sin(dp / 2)
+                + StrictMath.cos(p1) * StrictMath.cos(p2) * StrictMath.sin(dl / 2) * StrictMath.sin(dl / 2);
+        return 2 * EARTH_RADIUS_M * StrictMath.asin(Math.min(1.0, Math.sqrt(a)));
     }
 
     /** Speed in knots needed to cover the distance in the time; infinite when no time passed. */
@@ -43,6 +48,6 @@ public final class Geo {
 
     /** Width in metres of one cell of {@code dLon} degrees at this latitude. */
     public static double cellWidthM(double lat, double dLon) {
-        return Math.toRadians(dLon) * EARTH_RADIUS_M * Math.cos(Math.toRadians(lat));
+        return Math.toRadians(dLon) * EARTH_RADIUS_M * StrictMath.cos(Math.toRadians(lat));
     }
 }
