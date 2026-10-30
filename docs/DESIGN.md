@@ -324,7 +324,9 @@ the live run was on ARM, the replay on x86. The dry run had not shown it because
 no events. Distances now go through `StrictMath`, which gives the same bits on every platform.
 Replayed with it on x86 and on emulated arm64 (QEMU under Docker), the window gave identical
 events, rejected messages and totals, byte for byte. On x86, `Math` and `StrictMath` differ in 40
-of the 9,037 events.
+of the 9,037 events. The emulation was checked against the real machine: the old `Math` build
+(`301e2db`) replayed on emulated arm64 reproduced the live run's output byte for byte, so on the
+same architecture the live run and its replay are identical.
 
 ## What this does not claim
 
@@ -332,7 +334,8 @@ of the 9,037 events.
 - Masks come from the same window the detectors run on. That is circular by design: they describe
   where vessels in this recording stop and where reception is continuous, not where ports are.
 - No throughput or latency figure is stated anywhere without the run it came from.
-- The live run of `d1` used `Math`, so its events match the replay's in number, vessels and times but
-  not byte for byte; that claim holds only for runs made with `StrictMath`.
+- The live run of `d1` used `Math`, so it replays byte for byte only on ARM; on x86 its events match
+  in number, vessels and times, with distances equal to fifteen significant digits. Byte for byte
+  on any machine holds for runs made with `StrictMath`.
 - The shore band is measured where an episode began, and the 50 to 200 m band is undecided. The
   farm register lists licensed sites, not which ones are stocked or worked that day.
