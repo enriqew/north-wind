@@ -342,7 +342,9 @@ its fifth checkpoint, whose transactional topic held 7,399 records and no duplic
 "under way using engine" while holding position for about three hours, and clustered in the fjords
 of Troms and Finnmark. Their MMSIs were not a ship station's: a 109 prefix, unassigned maritime
 identification digits, seven digits. Their names, in the static reports and never exported, are
-often a name followed by BUOY or BOUY and a number. They are AIS buoys on fishing nets. Two steps now open the loitering and rendezvous funnels: a ship station's
+often a name followed by BUOY or BOUY and a number: of the 190 loitering episodes from a non-ship
+MMSI on the day, 92 come from a station whose name says buoy or net. They are AIS buoys on fishing
+nets, or devices like them. Two steps now open the loitering and rendezvous funnels: a ship station's
 MMSI (ITU-R M.585: nine digits from a maritime identification digit of 2 to 7) and a declared ship
 type. Of 1,623 loitering episodes, 190 fail the first, 92% of them north of 69°N, and 132 the second.
 
