@@ -26,8 +26,8 @@ Every file carries `schema_version` (currently `1`). A reader must refuse a vers
 | `fates.json` | Message totals per fate, per receiving network, and invalid messages per reason |
 | `lateness.json` | Lateness (arrival minus event time) per network: quantiles and a log-binned histogram, from the window's profile and the recording |
 | `traffic.json` | Position reports received per coverage cell (0.1° × 0.2°) per hour of the window, from the recording, for the map |
-| `events.json` | Every detection, with the funnel fields (`underway`, `coveredStart`, `coveredEnd`, `outageOverlap`, `approached`, `heldPosition`, `shore`, `atFarm`, `truncated`) and, for loitering and rendezvous, `shore_m`: the distance to the nearest coast, rounded to 10 m |
-| `funnels.json` | Per pattern, how many detections pass each successive filter |
+| `events.json` | Every detection, with the funnel fields (`underway`, `coveredStart`, `coveredEnd`, `outageOverlap`, `approached`, `heldPosition`, `shore`, `atFarm`, `truncated`, and `ship_station`, `other_ship_station` for whether each MMSI has a ship station's form) and, for loitering and rendezvous, `shore_m`: the distance to the nearest coast, rounded to 10 m, and, when one is within 1 km of where the episode began, the offshore installation (`installation`, `installation_kind`, `installation_m`, rounded to 10 m) |
+| `funnels.json` | Per pattern, how many detections pass each successive filter. Loitering and rendezvous open with two steps on what the station is: a ship station's MMSI (ITU-R M.585: nine digits from a maritime identification digit of 2 to 7) and a declared ship type. Over a day, most of what holds position in open water is AIS buoys on fishing nets, under made-up MMSIs and with no type |
 
 ## The live run
 
@@ -55,6 +55,10 @@ to the window export above, which stays the analysis; this file is about the job
 
 Nothing in it identifies a vessel: the differing events are reduced to a field name and two numbers.
 
+The export also needs `windows/<w>/masks/installations.csv`, from `python -m northwind.installations
+--name <w>`: the surface installations in service at sea in the Norwegian Offshore Directorate's
+facility register (NLOD), downloaded once into `external/sodir/`. It refuses to write without it.
+
 ## What is not exported
 
 - **No MMSI, no vessel name, no call sign.** Each vessel gets an id local to the export (`v1`, `v2`,
@@ -76,3 +80,5 @@ Nothing in it identifies a vessel: the differing events are reduced to a field n
 - Coastline © Kartverket, CC BY 4.0.
 - Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the
   Directorate of Fisheries.
+- Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the
+  Norwegian Offshore Directorate.
