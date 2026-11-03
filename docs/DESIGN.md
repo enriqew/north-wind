@@ -328,9 +328,46 @@ of the 9,037 events. The emulation was checked against the real machine: the old
 (`301e2db`) replayed on emulated arm64 reproduced the live run's output byte for byte, so on the
 same architecture the live run and its replay are identical.
 
+## The day as the analysis window
+
+The four-hour window was a test. The page reads window `oct28`: the interval of `d1`, Wednesday
+2026-10-28 00:00 to 24:00 UTC, the same 19,535,335 messages with the same sha256, replayed with
+port, coverage and shore masks built from the day itself (400 port areas). `d1` keeps the masks the
+live run used and the runs `live.json` compares, so nothing behind the live comparison moved. All
+four checks hold on `oct28-b120`: conservation, a rerun, and a run with a TaskManager killed after
+its fifth checkpoint, whose transactional topic held 7,399 records and no duplicate.
+
+**Over a day, much of what loiters is not a ship.** With the four-hour window's funnel, the day left
+269 loitering episodes and 59 rendezvous. Most of the loitering ones had no ship type, reported
+"under way using engine" while holding position for about three hours, and clustered in the fjords
+of Troms and Finnmark. Their MMSIs were not a ship station's: a 109 prefix, unassigned maritime
+identification digits, seven digits. Their names, in the static reports and never exported, are
+often a name followed by BUOY or BOUY and a number. They are AIS buoys on fishing nets. Two steps now open the loitering and rendezvous funnels: a ship station's
+MMSI (ITU-R M.585: nine digits from a maritime identification digit of 2 to 7) and a declared ship
+type. Of 1,623 loitering episodes, 190 fail the first, 92% of them north of 69°N, and 132 the second.
+
+| Funnel | Loitering | Rendezvous |
+|---|---|---|
+| Detected | 1,623 | 414 |
+| A ship station's MMSI | 1,433 | 377 |
+| A declared ship type | 1,301 | 363 |
+| Not held at the shore | 341 | 96 |
+| Not at a fish farm | 161 | 22 |
+| Arrived underway | 101 | 22 |
+| Ended inside the window | 66 | 15 |
+
+The 81 survivors are too many to check by hand, as the four-hour window's six were. Instead
+`northwind.installations` writes the surface installations in service at sea from the Norwegian
+Offshore Directorate's facility register (NLOD) beside the window's masks, ED50 positions converted
+to WGS84, and the export names the one within 1 km of where an episode began. 13 of the 81 began
+beside one, three of them within 50 m of the Norne production ship.
+
 ## What this does not claim
 
 - An AIS gap is a fact about reception. It says nothing about why.
+- A station whose MMSI has no ship form, or that declares no type, is taken out as a device. A real
+  vessel with a malformed MMSI or no declared type goes out with the buoys.
+- Beside an installation is a distance, not a purpose: supply and standby vessels wait there.
 - Masks come from the same window the detectors run on. That is circular by design: they describe
   where vessels in this recording stop and where reception is continuous, not where ports are.
 - No throughput or latency figure is stated anywhere without the run it came from.
