@@ -8,8 +8,8 @@ of an hour late.
 The subject is less the patterns than what a real AIS feed does to a streaming job, and how the job
 stays correct anyway:
 
-- **Every message has exactly one fate.** Position, static report, duplicate, late or invalid
-  (with a reason). The job counts its input and each fate, and a run fails its check unless they
+- **Every message has exactly one fate.** Position, static report, duplicate, late, invalid
+  (with a reason) or outside the window. The job counts its input and each fate, and a run fails its check unless they
   add up to the recorded window.
 - **The same input gives the same output.** Watermarks are emitted per event rather than on a
   processing-time timer, everything that judges lateness runs at parallelism 1, and every keyed
@@ -34,6 +34,12 @@ at a salmon farm. Both are downloaded once from Geonorge into `$NW_DATA_DIR/exte
   Coastline © Kartverket, CC BY 4.0.
 - `akvakultur/`: the Directorate of Fisheries, *Akvakultur - lokaliteter*, the national FGDB in
   EPSG:25833. Contains data under the NLOD distributed by the Directorate of Fisheries.
+
+A third names the offshore installation a surviving episode began beside, downloaded once into
+`$NW_DATA_DIR/external/sodir/` (the URL is in `py/northwind/installations.py`):
+
+- `facility_fixed.csv`: the Norwegian Offshore Directorate's facility register. Contains data under
+  the NLOD distributed by the Norwegian Offshore Directorate.
 
 The recording stays local. What leaves this repository is aggregate output: detections without
 vessel names or MMSI numbers.
@@ -60,6 +66,7 @@ docker compose run --rm --no-deps tools python -m northwind.replay --name w1 \
     --start 2026-10-13T10:00:00Z --end 2026-10-13T16:00:00Z
 docker compose run --rm --no-deps tools python -m northwind.masks --name w1
 docker compose run --rm --no-deps tools python -m northwind.shore --name w1
+docker compose run --rm --no-deps tools python -m northwind.installations --name w1
 docker compose run --rm --no-deps tools python -m northwind.profile --name w1
 
 # Run the job over it and check the run
@@ -68,6 +75,14 @@ docker compose exec jobmanager flink run /opt/flink/usrlib/north-wind.jar \
     --lateness-bound-s 120
 docker compose run --rm --no-deps tools python -m northwind.check --run w1-b120 --window w1
 ```
+
+`scripts/run-window.sh` does all of that for a window, then the rerun and the run with a TaskManager
+killed that the export needs; `python -m northwind.export` writes the JSON the portfolio page reads
+(contract in [docs/EXPORT.md](docs/EXPORT.md)).
+
+The same stack also runs live for a day on one EC2 machine: Terraform in `infra/`, start and stop
+scripts in `scripts/aws/`, the BarentsWatch credentials in SSM Parameter Store. `northwind.export_live`
+compares that run with replays of its own recording.
 
 On Git Bash for Windows, prefix `docker compose exec` and `run` commands with `MSYS_NO_PATHCONV=1`
 so container paths are not rewritten.
@@ -79,4 +94,4 @@ See [docs/DESIGN.md](docs/DESIGN.md) for how it works and why.
 
 ## License
 
-MIT for the code. The AIS and fish farm data are NLOD, the coastline CC BY 4.0, see above.
+MIT for the code. The AIS, fish farm and installation data are NLOD, the coastline CC BY 4.0, see above.
