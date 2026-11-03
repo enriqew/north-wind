@@ -13,7 +13,8 @@ window=$1 clean=$2 run=$3 bound=${4:-120}
 topic="events.$run"
 flink=http://localhost:8081
 cd "$(dirname "$0")/.."
-data=$(sed -n 's/^NW_DATA_DIR=//p' .env 2>/dev/null || true)
+# Like Compose, the environment wins over .env.
+data=${NW_DATA_DIR:-$(sed -n 's/^NW_DATA_DIR=//p' .env 2>/dev/null || true)}
 data=${data:-./data}
 
 docker compose run --rm --no-deps tools python -m northwind.compare --runs "$clean" --topic "$topic" --create-topic
