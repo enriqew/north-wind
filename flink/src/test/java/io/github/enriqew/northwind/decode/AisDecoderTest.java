@@ -21,7 +21,7 @@ class AisDecoderTest {
         return "{\"type\":\"Position\",\"messageType\":1,\"courseOverGround\":12.5,\"aisClass\":\"A\","
                 + "\"latitude\":" + lat + ",\"longitude\":" + lon + ",\"navigationalStatus\":0,"
                 + "\"rateOfTurn\":null,\"speedOverGround\":" + sog + ",\"trueHeading\":null,"
-                + "\"mmsi\":257668800,\"msgtime\":\"" + msgtime + "\",\"stream\":\"terra\"}";
+                + "\"mmsi\":257000101,\"msgtime\":\"" + msgtime + "\",\"stream\":\"terra\"}";
     }
 
     @Test
@@ -30,7 +30,7 @@ class AisDecoderTest {
         assertTrue(r.ok());
         AisRecord a = r.record;
         assertEquals(AisRecord.POSITION, a.kind);
-        assertEquals(257668800L, a.mmsi);
+        assertEquals(257000101L, a.mmsi);
         assertEquals(ARRIVAL - 4_000, a.msgtimeMs);
         assertEquals(69.508995, a.lat);
         assertEquals(8.4, a.sog);
@@ -46,7 +46,7 @@ class AisDecoderTest {
 
     @Test
     void decodesStaticData() {
-        String json = "{\"type\":\"Staticdata\",\"messageType\":5,\"mmsi\":257088000,"
+        String json = "{\"type\":\"Staticdata\",\"messageType\":5,\"mmsi\":257000102,"
                 + "\"msgtime\":\"2026-10-13T09:36:50+00:00\",\"name\":\"X\",\"shipType\":60,"
                 + "\"shipLength\":123,\"stream\":\"satellite\"}";
         AisDecoder.Result r = decoder.decode(raw(json));
