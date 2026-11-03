@@ -9,7 +9,9 @@ unrounded position.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import math
 import shutil
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -27,6 +29,8 @@ ATTRIBUTION = [
     "Coastline © Kartverket, CC BY 4.0.",
     "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the "
     "Directorate of Fisheries.",
+    "Contains data under the Norwegian licence for Open Government Data (NLOD) distributed by the "
+    "Norwegian Offshore Directorate.",
 ]
 
 # Mirrors the constants in the Flink job (GapLogic, StopLogic, RendezvousLogic, TrackFilter, Shore).
@@ -39,7 +43,10 @@ THRESHOLDS = {
     "shore": {"shore_m": 50, "near_m": 200},
     "fish_farm": {"within_m": 200},
     "track_filter": {"max_kn": 60, "min_jump_m": 2000},
+    "installation": {"beside_m": 1000},
 }
+
+INSTALLATION_BESIDE_M = THRESHOLDS["installation"]["beside_m"]
 
 LATENESS_EDGES_S = [0, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200]
 
@@ -67,6 +74,42 @@ def ship_category(code: int | None) -> str:
     if 80 <= code <= 89:
         return "tanker"
     return "other"
+
+
+def ship_mmsi(mmsi: int | None) -> bool:
+    """Whether an MMSI has a ship station's form (ITU-R M.585): nine digits, starting with a maritime
+    identification digit from 2 to 7. Craft tied to a parent ship (98...), aids to navigation (99...),
+    search and rescue aircraft (111...), handheld radios (8...) and the numbers fishermen give the AIS
+    buoys on their nets (109..., seven digits, and the like) do not."""
+    s = str(mmsi or "")
+    return len(s) == 9 and s[0] in "234567"
+
+
+def typed(ship_type: int | None) -> bool:
+    return ship_category(ship_type) != "unknown"
+
+
+def metres(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6_371_000 * math.asin(math.sqrt(a))
+
+
+def read_installations(window: Manifest) -> list[dict]:
+    path = DATA / "windows" / window.name / "masks" / "installations.csv"
+    if not path.exists():
+        raise Refused(f"missing {path.relative_to(DATA)} (python -m northwind.installations)")
+    with path.open(newline="") as f:
+        return [{**r, "lat": float(r["lat"]), "lon": float(r["lon"])} for r in csv.DictReader(f)]
+
+
+def beside(lat: float, lon: float, installations: list[dict]) -> dict | None:
+    """The nearest offshore installation, if one is within INSTALLATION_BESIDE_M."""
+    best = min(installations, key=lambda i: metres(lat, lon, i["lat"], i["lon"]), default=None)
+    if best is None:
+        return None
+    d = metres(lat, lon, best["lat"], best["lon"])
+    return {"installation": best["name"], "installation_kind": best["kind"], "installation_m": round(d, -1)}         if d <= INSTALLATION_BESIDE_M else None
 
 
 def read_json(path: Path) -> dict:
@@ -106,8 +149,10 @@ def checks(window: Manifest, run: str) -> dict:
     }
 
 
-def anonymise(events: list[dict]) -> list[dict]:
-    """Replace MMSIs with ids local to this export, in order of first detection."""
+def anonymise(events: list[dict], installations: list[dict] | None = None) -> list[dict]:
+    """Replace MMSIs with ids local to this export, in order of first detection. What the MMSI says
+    about the station (a ship's form or not) is kept as a flag, and loitering and rendezvous
+    episodes get the offshore installation they began beside, if any."""
     order = sorted(events, key=lambda e: (e["startMs"], e["pattern"], e["mmsi"], e.get("otherMmsi") or 0))
     ids: dict[int, str] = {}
 
@@ -127,6 +172,7 @@ def anonymise(events: list[dict]) -> list[dict]:
             "lat": round(e["lat"], POSITION_DECIMALS),
             "lon": round(e["lon"], POSITION_DECIMALS),
             "truncated": e.get("truncated", False),
+            "ship_station": ship_mmsi(e["mmsi"]),
         }
         if e.get("endLat") is not None:
             row["end_lat"] = round(e["endLat"], POSITION_DECIMALS)
@@ -134,6 +180,9 @@ def anonymise(events: list[dict]) -> list[dict]:
         if e.get("otherMmsi") is not None:
             row["other_vessel"] = vid(e["otherMmsi"])
             row["other_category"] = ship_category(e.get("otherShipType"))
+            row["other_ship_station"] = ship_mmsi(e["otherMmsi"])
+        if installations and e["pattern"] in ("loitering", "rendezvous"):
+            row.update(beside(e["lat"], e["lon"], installations) or {})
         for src, dst, digits in [
             ("distanceKm", "distance_km", 1), ("impliedKnots", "implied_kn", 1),
             ("minDistanceM", "min_distance_m", 0), ("maxDriftKm", "max_drift_km", 1),
@@ -166,6 +215,9 @@ def funnels(events: list[dict]) -> dict:
     out["ais_gap"] = funnel(gaps, steps)
     out["rendezvous"] = funnel(by.get("rendezvous", []), [
         ("together 30 min or more", lambda e: True),
+        ("both have a ship's MMSI (not a net buoy or other device)",
+         lambda e: ship_mmsi(e["mmsi"]) and ship_mmsi(e.get("otherMmsi"))),
+        ("both declare a ship type", lambda e: typed(e.get("shipType")) and typed(e.get("otherShipType"))),
         ("did not hold position together at the shore (moored side by side)", not_moored),
         ("not at a fish farm", lambda e: e.get("atFarm") is False),
         ("a vessel arrived underway", lambda e: e.get("approached")),
@@ -173,6 +225,8 @@ def funnels(events: list[dict]) -> dict:
     ])
     out["loitering"] = funnel(by.get("loitering", []), [
         ("slow outside port 2 h or more", lambda e: True),
+        ("has a ship's MMSI (not a net buoy or other device)", lambda e: ship_mmsi(e["mmsi"])),
+        ("declares a ship type", lambda e: typed(e.get("shipType"))),
         ("did not hold position at the shore (moored)", not_moored),
         ("not at a fish farm", lambda e: e.get("atFarm") is False),
         ("arrived underway", lambda e: e.get("approached")),
@@ -256,7 +310,11 @@ def main() -> None:
         raise SystemExit(f"export refused: {why}") from None
 
     raw_events = list(read_jsonl(DATA / "runs" / args.run / "events"))
-    events = anonymise(raw_events)
+    try:
+        installations = read_installations(window)
+    except Refused as why:
+        raise SystemExit(f"export refused: {why}") from None
+    events = anonymise(raw_events, installations)
     conservation = verified["conservation"]
 
     final = DATA / "exports" / args.run
