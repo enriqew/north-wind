@@ -31,7 +31,7 @@ SCHEMA_VERSION = 1
 DISTANCE_FIELDS = ("distanceKm", "impliedKnots", "minDistanceM", "maxDriftKm")
 MAX_RELATIVE = 1e-12
 
-_TIME = r"(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3})"
+_TIME = r"(\d{4}-\d\d-\d\d [0-9]{2}:[0-9]{2}:[0-9]{2},\d{3})"
 SESSION = re.compile(r"^ingest\S*\s+\|\s+" + _TIME + r" INFO session (\w+) (open|close)\s*(.*)$")
 ARCH = re.compile(r"^(?:jobmanager|taskmanager)\S*\s+\|.* Arch: (\S+)\s*$")
 
