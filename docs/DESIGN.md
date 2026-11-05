@@ -317,8 +317,9 @@ from Flink's REST API every five minutes, 312 samples:
 Replayed afterwards on x86 from the recording, with the same masks and lateness bound, the window
 gave the same 145,436 rejected messages and the same totals, byte for byte, and the same 9,037
 events. Byte for byte, 39 of those events were not the same. Each had one distance
-(`maxDriftKm`, `minDistanceM`, `distanceKm` or `impliedKnots`) that differed in its last digit,
-0.38111385966453193 against 0.3811138596645318, a relative difference of at most 3.6e-16. Java
+(`maxDriftKm`, `minDistanceM` or `distanceKm`) that differed in its last digit, and one AIS gap
+also the `impliedKnots` computed from its distance, 40 values in all: 0.38111385966453193 against
+0.3811138596645318, a relative difference of at most 3.6e-16, two ulps. Java
 allows `Math.sin`, `cos` and `asin` to be off by an ulp, and the JIT uses each CPU's own routines:
 the live run was on ARM, the replay on x86. The dry run had not shown it because its half hour had
 no events. Distances now go through `StrictMath`, which gives the same bits on every platform.
